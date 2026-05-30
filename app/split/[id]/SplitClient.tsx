@@ -56,6 +56,7 @@ export default function SplitClient({ idParam }: Props) {
   const amountPerPerson = splitData?.[1];
   const participants = splitData?.[2] ?? [];
   const paidCount = splitData?.[3] ?? 0n;
+  const memo = splitData?.[4] ?? '';
 
   const exists = creator && creator !== '0x0000000000000000000000000000000000000000';
 
@@ -193,6 +194,11 @@ export default function SplitClient({ idParam }: Props) {
 
         <div className="text-center">
           <p className="text-sm text-zinc-500">Split #{idParam}</p>
+          {memo && (
+            <p className="text-lg font-medium text-zinc-900 dark:text-white mt-1">
+              {memo}
+            </p>
+          )}
           <p className="text-5xl font-bold mt-2 text-black dark:text-white">
             ${formatUSDC(amountPerPerson!)}
           </p>

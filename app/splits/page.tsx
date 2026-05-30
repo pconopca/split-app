@@ -129,6 +129,11 @@ function SplitCard({ split, viewerAddress }: { split: UserSplit; viewerAddress: 
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-col gap-1 min-w-0">
             <span className="text-xs text-zinc-500 font-medium">Split #{split.id.toString()}</span>
+            {split.memo ? (
+              <span className="text-base font-semibold text-zinc-900 dark:text-white truncate">
+                {split.memo}
+              </span>
+            ) : null}
             <span className="text-2xl font-bold text-zinc-900 dark:text-white">
               ${formatUSDC(split.amountPerPerson)}
             </span>

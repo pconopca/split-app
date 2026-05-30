@@ -5,7 +5,12 @@ import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagm
 import { decodeEventLog, parseUnits } from 'viem';
 import Link from 'next/link';
 import { ConnectButton } from '@/components/ConnectButton';
-import { SPLIT_REGISTRY_ABI, SPLIT_REGISTRY_ADDRESS, ACTIVE_CHAIN } from '@/lib/contract';
+import {
+  SPLIT_REGISTRY_ABI,
+  SPLIT_REGISTRY_ADDRESS,
+  ACTIVE_CHAIN,
+  MAX_MEMO_LENGTH,
+} from '@/lib/contract';
 import { ParticipantInput } from '@/components/ParticipantInput';
 import { SaveFriendsPrompt } from '@/components/SaveFriendsPrompt';
 import { ShareButton } from '@/components/ShareButton';
@@ -26,9 +31,12 @@ export default function NewSplitPage() {
   const [step, setStep] = useState<Step>(1);
 
   // Step 1 state
+  const [memo, setMemo] = useState('');
   const [totalInput, setTotalInput] = useState('');
   const [peopleCount, setPeopleCount] = useState(2);
   const [includeMe, setIncludeMe] = useState(true);
+  const memoBytes = new TextEncoder().encode(memo).length;
+  const memoTooLong = memoBytes > MAX_MEMO_LENGTH;
 
   const totalUSDC = (() => {
     if (!totalInput) return null;
@@ -107,12 +115,13 @@ export default function NewSplitPage() {
       address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
       abi: SPLIT_REGISTRY_ABI,
       functionName: 'createSplit',
-      args: [perPersonUSDC, dedupedAddresses],
+      args: [perPersonUSDC, dedupedAddresses, memo.trim()],
       chainId: ACTIVE_CHAIN.id,
     });
   }
 
-  const canAdvanceFrom1 = totalUSDC !== null && peopleCount >= 2 && friendsNeeded >= 1;
+  const canAdvanceFrom1 =
+    totalUSDC !== null && peopleCount >= 2 && friendsNeeded >= 1 && !memoTooLong;
 
   return (
     <div className="flex flex-col flex-1 bg-white dark:bg-[#0a0e1a]">
@@ -134,6 +143,10 @@ export default function NewSplitPage() {
 
         {step === 1 && (
           <Step1
+            memo={memo}
+            setMemo={setMemo}
+            memoBytes={memoBytes}
+            memoTooLong={memoTooLong}
             totalInput={totalInput}
             setTotalInput={setTotalInput}
             peopleCount={peopleCount}
@@ -162,6 +175,7 @@ export default function NewSplitPage() {
 
         {step === 3 && (
           <Step3
+            memo={memo}
             totalUSDC={totalUSDC}
             perPersonUSDC={perPersonUSDC}
             peopleCount={peopleCount}
@@ -223,6 +237,10 @@ function StepIndicator({ current }: { current: Step }) {
 }
 
 type Step1Props = {
+  memo: string;
+  setMemo: (v: string) => void;
+  memoBytes: number;
+  memoTooLong: boolean;
   totalInput: string;
   setTotalInput: (v: string) => void;
   peopleCount: number;
@@ -237,6 +255,10 @@ type Step1Props = {
 };
 
 function Step1({
+  memo,
+  setMemo,
+  memoBytes,
+  memoTooLong,
   totalInput,
   setTotalInput,
   peopleCount,
@@ -252,8 +274,35 @@ function Step1({
   return (
     <>
       <div>
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">How much, and with whom?</h1>
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">What&apos;s it for?</h1>
         <p className="text-sm text-zinc-500 mt-1">We&apos;ll calculate each person&apos;s share.</p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Description <span className="text-zinc-400 font-normal">(optional)</span>
+        </label>
+        <input
+          type="text"
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          placeholder="e.g. Dinner at Coco, birthday gift…"
+          maxLength={MAX_MEMO_LENGTH * 2}
+          className={`w-full px-4 py-3 rounded-xl border bg-white dark:bg-zinc-900 text-base text-zinc-900 dark:text-white focus:outline-none focus:ring-2 ${
+            memoTooLong
+              ? 'border-red-400 focus:ring-red-500'
+              : 'border-zinc-200 dark:border-zinc-700 focus:ring-[#0052ff]'
+          }`}
+        />
+        {memo.length > 0 && (
+          <p
+            className={`text-xs px-1 ${
+              memoTooLong ? 'text-red-500' : 'text-zinc-500'
+            }`}
+          >
+            {memoBytes} / {MAX_MEMO_LENGTH} bytes
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -412,6 +461,7 @@ function Step2({ rows, updateRow, friendsNeeded, includeMe, allValid, onBack, on
 }
 
 type Step3Props = {
+  memo: string;
   totalUSDC: bigint | null;
   perPersonUSDC: bigint | null;
   peopleCount: number;
@@ -427,6 +477,7 @@ type Step3Props = {
 };
 
 function Step3({
+  memo,
   totalUSDC,
   perPersonUSDC,
   peopleCount,
@@ -491,6 +542,7 @@ function Step3({
       </div>
 
       <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800">
+        {memo.trim() && <Row label="For" value={memo.trim()} />}
         <Row label="Total bill" value={totalUSDC !== null ? `$${formatUSDC(totalUSDC)}` : '—'} />
         <Row label="People" value={`${peopleCount} ${includeMe ? '(you + ' + (peopleCount - 1) + ')' : ''}`} />
         <Row

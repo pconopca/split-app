@@ -7,6 +7,7 @@ export const SPLIT_REGISTRY_ABI = [
     inputs: [
       { name: 'amountPerPerson', type: 'uint256' },
       { name: 'participants', type: 'address[]' },
+      { name: 'memo', type: 'string' },
     ],
     outputs: [{ name: 'splitId', type: 'uint256' }],
     stateMutability: 'nonpayable',
@@ -27,6 +28,7 @@ export const SPLIT_REGISTRY_ABI = [
       { name: 'amountPerPerson', type: 'uint256' },
       { name: 'participants', type: 'address[]' },
       { name: 'paidCount', type: 'uint256' },
+      { name: 'memo', type: 'string' },
     ],
     stateMutability: 'view',
   },
@@ -42,7 +44,24 @@ export const SPLIT_REGISTRY_ABI = [
   },
   {
     type: 'function',
+    name: 'isParticipant',
+    inputs: [
+      { name: 'splitId', type: 'uint256' },
+      { name: 'addr', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'nextSplitId',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'MAX_MEMO_BYTES',
     inputs: [],
     outputs: [{ name: '', type: 'uint256' }],
     stateMutability: 'view',
@@ -55,6 +74,7 @@ export const SPLIT_REGISTRY_ABI = [
       { name: 'creator', type: 'address', indexed: true },
       { name: 'amountPerPerson', type: 'uint256', indexed: false },
       { name: 'participants', type: 'address[]', indexed: false },
+      { name: 'memo', type: 'string', indexed: false },
     ],
     anonymous: false,
   },
@@ -68,21 +88,22 @@ export const SPLIT_REGISTRY_ABI = [
     ],
     anonymous: false,
   },
+  {
+    type: 'event',
+    name: 'SplitSettled',
+    inputs: [{ name: 'splitId', type: 'uint256', indexed: true }],
+    anonymous: false,
+  },
 ] as const;
 
 export const SPLIT_REGISTRY_ADDRESS: Record<number, `0x${string}`> = {
-  [baseSepolia.id]: '0xeaC7919e5be02dFc038b4232b06e8F19c0A5e0cd',
+  [baseSepolia.id]: '0xf39820b22C4eebFEef68B30198a0e6FF2228f562',
   // [base.id]: '0x...', // fill after mainnet deploy
 };
 
-/**
- * Block at which the SplitRegistry was deployed on each chain.
- * Used as the lower bound for getLogs queries — public RPCs reject
- * scanning from 'earliest' over long ranges.
- */
 export const SPLIT_REGISTRY_DEPLOY_BLOCK: Record<number, bigint> = {
-  [baseSepolia.id]: 42168525n,
-  // [base.id]: 0n, // fill after mainnet deploy
+  [baseSepolia.id]: 42201397n,
+  // [base.id]: 0n,
 };
 
 export const USDC_ADDRESS: Record<number, `0x${string}`> = {
@@ -91,3 +112,5 @@ export const USDC_ADDRESS: Record<number, `0x${string}`> = {
 };
 
 export const ACTIVE_CHAIN = baseSepolia;
+
+export const MAX_MEMO_LENGTH = 200;

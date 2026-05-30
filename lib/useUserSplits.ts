@@ -19,6 +19,7 @@ export type UserSplit = {
   amountPerPerson: bigint;
   participants: readonly `0x${string}`[];
   paidCount: bigint;
+  memo: string;
   createdBlock: bigint;
   /**
    * 'creator' = user created this split.
@@ -29,7 +30,7 @@ export type UserSplit = {
 };
 
 const SPLIT_CREATED_EVENT = parseAbiItem(
-  'event SplitCreated(uint256 indexed splitId, address indexed creator, uint256 amountPerPerson, address[] participants)',
+  'event SplitCreated(uint256 indexed splitId, address indexed creator, uint256 amountPerPerson, address[] participants, string memo)',
 );
 
 export function useUserSplits(userAddress: `0x${string}` | undefined) {
@@ -97,7 +98,7 @@ export function useUserSplits(userAddress: `0x${string}` | undefined) {
         // Fetch current paidCount for each candidate.
         const enriched: UserSplit[] = await Promise.all(
           candidates.map(async (c) => {
-            const [, , participants, paidCount] = await publicClient.readContract({
+            const [, , participants, paidCount, memo] = await publicClient.readContract({
               address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
               abi: SPLIT_REGISTRY_ABI,
               functionName: 'getSplit',
@@ -119,6 +120,7 @@ export function useUserSplits(userAddress: `0x${string}` | undefined) {
               amountPerPerson: c.amountPerPerson,
               participants,
               paidCount,
+              memo,
               createdBlock: c.createdBlock,
               role,
             };

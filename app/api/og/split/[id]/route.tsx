@@ -39,13 +39,27 @@ export async function GET(_req: Request, { params }: Params) {
         </div>
         {split ? (
           <>
+            {split.memo && (
+              <div
+                style={{
+                  fontSize: 56,
+                  fontWeight: 600,
+                  marginBottom: 24,
+                  display: 'flex',
+                  textAlign: 'center',
+                  maxWidth: 1000,
+                }}
+              >
+                {split.memo}
+              </div>
+            )}
             <div style={{ fontSize: 160, fontWeight: 800, lineHeight: 1, display: 'flex' }}>
               ${formatUSDC(split.amountPerPerson)}
             </div>
             <div style={{ fontSize: 36, opacity: 0.7, marginTop: 20, display: 'flex' }}>
               per person · USDC on Base
             </div>
-            <div style={{ fontSize: 32, marginTop: 60, display: 'flex' }}>
+            <div style={{ fontSize: 32, marginTop: 40, display: 'flex' }}>
               {split.paidCount.toString()} / {split.participants.length} paid
             </div>
           </>

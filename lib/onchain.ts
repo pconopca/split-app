@@ -12,6 +12,7 @@ export type SplitView = {
   amountPerPerson: bigint;
   participants: readonly `0x${string}`[];
   paidCount: bigint;
+  memo: string;
 };
 
 export async function readSplit(splitId: bigint): Promise<SplitView | null> {
@@ -22,9 +23,9 @@ export async function readSplit(splitId: bigint): Promise<SplitView | null> {
       functionName: 'getSplit',
       args: [splitId],
     });
-    const [creator, amountPerPerson, participants, paidCount] = result;
+    const [creator, amountPerPerson, participants, paidCount, memo] = result;
     if (creator === '0x0000000000000000000000000000000000000000') return null;
-    return { creator, amountPerPerson, participants, paidCount };
+    return { creator, amountPerPerson, participants, paidCount, memo };
   } catch {
     return null;
   }

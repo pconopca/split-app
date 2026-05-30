@@ -21,11 +21,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
   const split = bigId !== null ? await readSplit(bigId) : null;
 
+  const memoSegment = split?.memo ? `${split.memo} · ` : '';
   const title = split
-    ? `Pay $${formatUSDC(split.amountPerPerson)} · Split #${id}`
+    ? `${memoSegment}Pay $${formatUSDC(split.amountPerPerson)} · Split #${id}`
     : `Split #${id}`;
   const description = split
-    ? `${split.paidCount}/${split.participants.length} paid · USDC on Base`
+    ? `${memoSegment}${split.paidCount}/${split.participants.length} paid · USDC on Base`
     : 'Split bills in USDC on Base.';
   const imageUrl = `${baseUrl}/api/og/split/${id}`;
 
