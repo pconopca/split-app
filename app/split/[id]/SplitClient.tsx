@@ -10,6 +10,7 @@ import {
   useWaitForTransactionReceipt,
 } from 'wagmi';
 import { ConnectButton } from '@/components/ConnectButton';
+import { ShareButton } from '@/components/ShareButton';
 import { Avatar, Name } from '@coinbase/onchainkit/identity';
 import { base } from 'wagmi/chains';
 import {
@@ -233,6 +234,18 @@ export default function SplitClient({ idParam }: Props) {
 
         {isConnected && !wrongChain && (
           <>
+            {isCreator && (
+              <ShareButton
+                variant="secondary"
+                url={typeof window !== 'undefined' ? window.location.href : ''}
+                title={`Split #${idParam}`}
+                text={
+                  amountPerPerson
+                    ? `Your share: $${formatUSDC(amountPerPerson)} USDC. Pay it on Base 👇`
+                    : 'Pay your share in USDC on Base 👇'
+                }
+              />
+            )}
             {isCreator && !isParticipant && (
               <p className="text-sm text-zinc-500 text-center">You created this split.</p>
             )}

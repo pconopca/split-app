@@ -8,6 +8,7 @@ import { ConnectButton } from '@/components/ConnectButton';
 import { SPLIT_REGISTRY_ABI, SPLIT_REGISTRY_ADDRESS, ACTIVE_CHAIN } from '@/lib/contract';
 import { ParticipantInput } from '@/components/ParticipantInput';
 import { SaveFriendsPrompt } from '@/components/SaveFriendsPrompt';
+import { ShareButton } from '@/components/ShareButton';
 import { formatUSDC } from '@/lib/usdc';
 
 type Row = { id: string; raw: string; resolved: `0x${string}` | null };
@@ -440,6 +441,13 @@ function Step3({
   onSubmit,
 }: Step3Props) {
   if (createdSplitId !== null) {
+    const splitUrl =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/split/${createdSplitId.toString()}`
+        : `/split/${createdSplitId.toString()}`;
+    const shareText = perPersonUSDC
+      ? `Your share: $${formatUSDC(perPersonUSDC)} USDC. Pay it on Base 👇`
+      : 'Pay your share in USDC on Base 👇';
     return (
       <div className="flex flex-col gap-6 py-4">
         <div className="flex flex-col items-center gap-3">
@@ -450,13 +458,14 @@ function Step3({
             <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">
               Split #{createdSplitId.toString()} created
             </h2>
-            <p className="text-sm text-zinc-500 mt-1">Share the link with friends.</p>
+            <p className="text-sm text-zinc-500 mt-1">Send it to your friends.</p>
           </div>
         </div>
+        <ShareButton url={splitUrl} title={`Split #${createdSplitId.toString()}`} text={shareText} />
         <SaveFriendsPrompt addresses={participants} />
         <Link
           href={`/split/${createdSplitId.toString()}`}
-          className="w-full py-4 rounded-xl bg-[#0052ff] hover:bg-[#0040cc] text-white font-semibold text-center shadow-lg shadow-[#0052ff]/20"
+          className="text-sm text-center text-zinc-500 hover:text-zinc-900 dark:hover:text-white underline"
         >
           Open split
         </Link>
