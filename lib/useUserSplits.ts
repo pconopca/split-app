@@ -9,6 +9,13 @@ import {
   SPLIT_REGISTRY_DEPLOY_BLOCK,
   ACTIVE_CHAIN,
 } from './contract';
+import {
+  type CachedCandidate,
+  type SplitsCache,
+  mergeCandidates,
+  readCache,
+  writeCache,
+} from './splitsCache';
 
 // Base Sepolia public RPC limits getLogs to 2000 blocks per request.
 const MAX_BLOCK_RANGE = 2_000n;
@@ -35,6 +42,37 @@ const SPLIT_CREATED_EVENT = parseAbiItem(
   'event SplitCreated(uint256 indexed splitId, address indexed creator, uint256 amountPerPerson, address[] participants, string memo)',
 );
 
+type Candidate = {
+  splitId: bigint;
+  creator: `0x${string}`;
+  amountPerPerson: bigint;
+  participants: readonly `0x${string}`[];
+  memo: string;
+  createdBlock: bigint;
+};
+
+function candidateFromCache(c: CachedCandidate): Candidate {
+  return {
+    splitId: BigInt(c.splitId),
+    creator: c.creator,
+    amountPerPerson: BigInt(c.amountPerPerson),
+    participants: c.participants,
+    memo: c.memo,
+    createdBlock: BigInt(c.createdBlock),
+  };
+}
+
+function candidateToCache(c: Candidate): CachedCandidate {
+  return {
+    splitId: c.splitId.toString(),
+    creator: c.creator,
+    amountPerPerson: c.amountPerPerson.toString(),
+    participants: [...c.participants],
+    memo: c.memo,
+    createdBlock: c.createdBlock.toString(),
+  };
+}
+
 export function useUserSplits(userAddress: `0x${string}` | undefined) {
   const publicClient = usePublicClient({ chainId: ACTIVE_CHAIN.id });
   const [splits, setSplits] = useState<UserSplit[]>([]);
@@ -51,55 +89,67 @@ export function useUserSplits(userAddress: `0x${string}` | undefined) {
       try {
         if (!publicClient || !userAddress) return;
 
-        // Public RPCs reject 'earliest' on long-lived chains, so scan
-        // from the contract's known deployment block in fixed-size chunks.
-        const fromBlock = SPLIT_REGISTRY_DEPLOY_BLOCK[ACTIVE_CHAIN.id] ?? 0n;
-        const toBlock = await publicClient.getBlockNumber();
-        const ranges: { from: bigint; to: bigint }[] = [];
-        let cursor = fromBlock;
-        while (cursor <= toBlock) {
-          const end =
-            cursor + MAX_BLOCK_RANGE - 1n > toBlock ? toBlock : cursor + MAX_BLOCK_RANGE - 1n;
-          ranges.push({ from: cursor, to: end });
-          cursor = end + 1n;
-        }
-        const chunks = await Promise.all(
-          ranges.map((r) =>
-            publicClient.getLogs({
-              address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
-              event: SPLIT_CREATED_EVENT,
-              fromBlock: r.from,
-              toBlock: r.to,
-            }),
-          ),
-        );
-        const logs = chunks.flat();
-
         const lowerUser = userAddress.toLowerCase();
+        const deployBlock = SPLIT_REGISTRY_DEPLOY_BLOCK[ACTIVE_CHAIN.id] ?? 0n;
 
-        // Pre-filter to splits where user is creator OR participant.
-        const candidates = logs
-          .map((log) => {
-            const { args, blockNumber } = log;
-            return {
-              splitId: args.splitId!,
-              creator: args.creator!,
-              amountPerPerson: args.amountPerPerson!,
-              participants: args.participants ?? [],
-              createdBlock: blockNumber,
-            };
-          })
-          .filter((s) => {
-            const isCreator = s.creator.toLowerCase() === lowerUser;
-            const isParticipant = s.participants.some(
-              (p) => p.toLowerCase() === lowerUser,
-            );
-            return isCreator || isParticipant;
-          });
+        // Load cached candidates from prior runs (always read fresh).
+        const cached = readCache(ACTIVE_CHAIN.id, userAddress);
+        const cachedCandidates: Candidate[] = cached
+          ? cached.candidates.map(candidateFromCache)
+          : [];
+        const cachedLastBlock = cached ? BigInt(cached.lastScannedBlock) : deployBlock - 1n;
+        const fromBlock = cachedLastBlock + 1n > deployBlock ? cachedLastBlock + 1n : deployBlock;
+        const toBlock = await publicClient.getBlockNumber();
 
-        // Fetch current paidCount + per-user hasPaid for each candidate.
+        // Scan only the delta since the last visit, in fixed-size chunks.
+        let newCandidates: Candidate[] = [];
+        if (fromBlock <= toBlock) {
+          const ranges: { from: bigint; to: bigint }[] = [];
+          let cursor = fromBlock;
+          while (cursor <= toBlock) {
+            const end =
+              cursor + MAX_BLOCK_RANGE - 1n > toBlock ? toBlock : cursor + MAX_BLOCK_RANGE - 1n;
+            ranges.push({ from: cursor, to: end });
+            cursor = end + 1n;
+          }
+          const chunks = await Promise.all(
+            ranges.map((r) =>
+              publicClient.getLogs({
+                address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
+                event: SPLIT_CREATED_EVENT,
+                fromBlock: r.from,
+                toBlock: r.to,
+              }),
+            ),
+          );
+          newCandidates = chunks
+            .flat()
+            .map((log) => ({
+              splitId: log.args.splitId!,
+              creator: log.args.creator!,
+              amountPerPerson: log.args.amountPerPerson!,
+              participants: log.args.participants ?? [],
+              memo: log.args.memo ?? '',
+              createdBlock: log.blockNumber,
+            }))
+            .filter((c) => {
+              const isCreator = c.creator.toLowerCase() === lowerUser;
+              const isParticipant = c.participants.some(
+                (p) => p.toLowerCase() === lowerUser,
+              );
+              return isCreator || isParticipant;
+            });
+        }
+
+        // Merge: existing cache + delta. Dedup by split id.
+        const allCandidatesById = new Map<string, Candidate>();
+        for (const c of cachedCandidates) allCandidatesById.set(c.splitId.toString(), c);
+        for (const c of newCandidates) allCandidatesById.set(c.splitId.toString(), c);
+        const allCandidates = Array.from(allCandidatesById.values());
+
+        // Always re-fetch the current state for every known candidate.
         const enriched: UserSplit[] = await Promise.all(
-          candidates.map(async (c) => {
+          allCandidates.map(async (c) => {
             const [splitTuple, hasPaidByUser] = await Promise.all([
               publicClient.readContract({
                 address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
@@ -141,6 +191,16 @@ export function useUserSplits(userAddress: `0x${string}` | undefined) {
 
         // Sort newest first.
         enriched.sort((a, b) => (b.createdBlock > a.createdBlock ? 1 : -1));
+
+        // Persist the merged candidate set + new high-water mark.
+        const next: SplitsCache = {
+          lastScannedBlock: toBlock.toString(),
+          candidates: mergeCandidates(
+            cached?.candidates ?? [],
+            newCandidates.map(candidateToCache),
+          ),
+        };
+        writeCache(ACTIVE_CHAIN.id, userAddress, next);
 
         if (!cancelled) setSplits(enriched);
       } catch (err) {
