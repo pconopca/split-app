@@ -116,14 +116,29 @@ export default function SplitClient({ idParam }: Props) {
   const justSucceeded = callsStatus?.status === 'success';
 
   const [showSuccess, setShowSuccess] = useState(false);
+  // Optimistic state: the receipt is in a block but the public RPC may serve
+  // a stale read for a moment, so we mark the user as paid locally as well.
+  const [optimisticPaid, setOptimisticPaid] = useState(false);
+  const userHasPaid = hasPaidData === true || optimisticPaid;
 
   useEffect(() => {
     if (!justSucceeded) return;
-    refetchSplit();
-    refetchPaid();
-    refetchAllowance();
-    refetchHasPaid();
+    setOptimisticPaid(true);
     setShowSuccess(true);
+    // Retry the refetches a couple times so we eventually match real state.
+    const tick = () => {
+      refetchSplit();
+      refetchPaid();
+      refetchAllowance();
+      refetchHasPaid();
+    };
+    tick();
+    const t1 = setTimeout(tick, 1500);
+    const t2 = setTimeout(tick, 4000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [justSucceeded, refetchSplit, refetchPaid, refetchAllowance, refetchHasPaid]);
 
   function handlePay() {
@@ -203,8 +218,8 @@ export default function SplitClient({ idParam }: Props) {
           </div>
           <ul className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-200 dark:divide-zinc-800">
             {participants.map((p, i) => {
-              const paid = paidStatuses?.[i]?.result === true;
               const isMe = address?.toLowerCase() === p.toLowerCase();
+              const paid = paidStatuses?.[i]?.result === true || (isMe && optimisticPaid);
               return (
                 <li key={p} className="flex items-center justify-between gap-3 p-3">
                   <div className="flex items-center gap-2 min-w-0">
@@ -261,12 +276,12 @@ export default function SplitClient({ idParam }: Props) {
                 You&apos;re not on the participant list.
               </p>
             )}
-            {isParticipant && hasPaidData && (
+            {isParticipant && userHasPaid && (
               <div className="rounded-xl border border-green-300 bg-green-50 dark:bg-green-950/40 p-4 text-center text-green-800 dark:text-green-200">
                 <p className="font-medium">✅ You&apos;ve paid your share.</p>
               </div>
             )}
-            {isParticipant && !hasPaidData && (
+            {isParticipant && !userHasPaid && (
               <div className="flex flex-col gap-2">
                 {!hasEnoughBalance && (
                   <p className="text-sm text-red-500 text-center">
