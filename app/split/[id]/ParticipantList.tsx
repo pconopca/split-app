@@ -1,7 +1,8 @@
 'use client';
 
-import { Avatar, Name } from '@coinbase/onchainkit/identity';
+import { Avatar } from '@coinbase/onchainkit/identity';
 import { base } from 'wagmi/chains';
+import { DisplayName } from '@/components/DisplayName';
 
 type PaidStatus = { result?: boolean | undefined } | undefined;
 
@@ -36,9 +37,8 @@ export function ParticipantList({
             <li key={p} className="flex items-center justify-between gap-3 p-3">
               <div className="flex items-center gap-2 min-w-0">
                 <Avatar address={p} chain={base} className="w-6 h-6 shrink-0" />
-                <Name
+                <DisplayName
                   address={p}
-                  chain={base}
                   className="text-sm font-mono truncate text-zinc-900 dark:text-zinc-100"
                 />
                 {isMe && (

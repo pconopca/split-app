@@ -1,8 +1,9 @@
 'use client';
 
-import { Avatar, Name } from '@coinbase/onchainkit/identity';
+import { Avatar } from '@coinbase/onchainkit/identity';
 import { base } from 'wagmi/chains';
 import { formatUSDC } from '@/lib/usdc';
+import { DisplayName } from '@/components/DisplayName';
 
 type Props = {
   idParam: string;
@@ -31,7 +32,7 @@ export function SplitHeader({ idParam, memo, amountPerPerson, creator }: Props) 
         <Avatar address={creator} chain={base} className="w-8 h-8" />
         <div className="flex flex-col">
           <p className="text-xs text-zinc-500">Created by</p>
-          <Name address={creator} chain={base} className="text-sm font-medium" />
+          <DisplayName address={creator} className="text-sm font-medium" />
         </div>
       </div>
     </>

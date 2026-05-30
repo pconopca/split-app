@@ -1,8 +1,7 @@
 'use client';
 
-import { Name } from '@coinbase/onchainkit/identity';
-import { base } from 'wagmi/chains';
 import { formatUSDC } from '@/lib/usdc';
+import { DisplayName } from '@/components/DisplayName';
 
 type Props = {
   amount: bigint;
@@ -34,9 +33,8 @@ export function PaidSuccessModal({ amount, recipient, onClose }: Props) {
           </h2>
           <p className="text-sm text-zinc-500 mt-1 flex items-center justify-center gap-1.5">
             Sent to{' '}
-            <Name
+            <DisplayName
               address={recipient}
-              chain={base}
               className="font-medium text-zinc-700 dark:text-zinc-300"
             />
           </p>
