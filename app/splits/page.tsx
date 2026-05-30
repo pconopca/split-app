@@ -134,9 +134,11 @@ function TabButton({
 function SplitCard({ split, viewerAddress }: { split: UserSplit; viewerAddress: `0x${string}` }) {
   const total = split.amountPerPerson * BigInt(split.participants.length);
   const allPaid = split.paidCount === BigInt(split.participants.length);
-  const youOwe =
-    split.role !== 'creator' &&
-    split.participants.some((p) => p.toLowerCase() === viewerAddress.toLowerCase());
+  const isParticipant = split.participants.some(
+    (p) => p.toLowerCase() === viewerAddress.toLowerCase(),
+  );
+  const youOwe = split.role !== 'creator' && isParticipant && !split.hasPaidByUser;
+  const youPaid = isParticipant && split.hasPaidByUser;
 
   return (
     <li>
@@ -171,6 +173,11 @@ function SplitCard({ split, viewerAddress }: { split: UserSplit; viewerAddress: 
             </span>
             {youOwe && (
               <span className="text-xs text-[#0052ff] font-medium">You owe</span>
+            )}
+            {youPaid && (
+              <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                You paid ✓
+              </span>
             )}
             {split.role === 'creator' && !allPaid && (
               <span className="text-xs text-zinc-500">Collecting</span>
