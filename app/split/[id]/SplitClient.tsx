@@ -6,9 +6,10 @@ import {
   useAccount,
   useReadContract,
   useReadContracts,
-  useWriteContract,
-  useWaitForTransactionReceipt,
+  useSendCalls,
+  useWaitForCallsStatus,
 } from 'wagmi';
+import { encodeFunctionData } from 'viem';
 import { ConnectButton } from '@/components/ConnectButton';
 import { ShareButton } from '@/components/ShareButton';
 import { Avatar, Name } from '@coinbase/onchainkit/identity';
@@ -106,47 +107,52 @@ export default function SplitClient({ idParam }: Props) {
   const hasEnoughBalance =
     amountPerPerson !== undefined && userBalance !== undefined && userBalance >= amountPerPerson;
 
-  const { writeContract, data: txHash, isPending, error, reset } = useWriteContract();
-  const { data: receipt, isLoading: isMining } = useWaitForTransactionReceipt({ hash: txHash });
+  const { sendCalls, data: callsData, isPending, error, reset } = useSendCalls();
+  const { data: callsStatus } = useWaitForCallsStatus({
+    id: callsData?.id,
+    query: { enabled: !!callsData?.id },
+  });
+  const isMining = callsData !== undefined && callsStatus?.status !== 'success' && callsStatus?.status !== 'failure';
+  const justSucceeded = callsStatus?.status === 'success';
 
-  const [phase, setPhase] = useState<'idle' | 'approving' | 'paying'>('idle');
+  const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
-    if (!receipt) return;
+    if (!justSucceeded) return;
     refetchSplit();
     refetchPaid();
     refetchAllowance();
-    if (phase === 'approving') {
-      setPhase('idle');
-      reset();
-    } else if (phase === 'paying') {
-      setPhase('idle');
-      reset();
-    }
-  }, [receipt, phase, reset, refetchSplit, refetchPaid, refetchAllowance]);
-
-  function handleApprove() {
-    if (!amountPerPerson) return;
-    setPhase('approving');
-    writeContract({
-      address: usdcAddress,
-      abi: ERC20_ABI,
-      functionName: 'approve',
-      args: [splitRegistry, amountPerPerson],
-      chainId: ACTIVE_CHAIN.id,
-    });
-  }
+    setShowSuccess(true);
+  }, [justSucceeded, refetchSplit, refetchPaid, refetchAllowance]);
 
   function handlePay() {
-    if (splitId === null) return;
-    setPhase('paying');
-    writeContract({
-      address: splitRegistry,
-      abi: SPLIT_REGISTRY_ABI,
-      functionName: 'pay',
-      args: [splitId],
-      chainId: ACTIVE_CHAIN.id,
-    });
+    if (splitId === null || amountPerPerson === undefined) return;
+    reset();
+    // EIP-5792 batch: Smart Wallet executes both calls in a single signature.
+    // Wallets without batch support fall back to sequential transactions.
+    const calls = [
+      ...(needsApproval
+        ? [
+            {
+              to: usdcAddress,
+              data: encodeFunctionData({
+                abi: ERC20_ABI,
+                functionName: 'approve',
+                args: [splitRegistry, amountPerPerson],
+              }),
+            },
+          ]
+        : []),
+      {
+        to: splitRegistry,
+        data: encodeFunctionData({
+          abi: SPLIT_REGISTRY_ABI,
+          functionName: 'pay',
+          args: [splitId],
+        }),
+      },
+    ];
+    sendCalls({ calls, chainId: ACTIVE_CHAIN.id });
   }
 
   if (splitId === null) {
@@ -255,39 +261,33 @@ export default function SplitClient({ idParam }: Props) {
               </p>
             )}
             {isParticipant && hasPaidData && (
-              <div className="rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/40 p-4 text-center text-green-800 dark:text-green-200">
+              <div className="rounded-xl border border-green-300 bg-green-50 dark:bg-green-950/40 p-4 text-center text-green-800 dark:text-green-200">
                 <p className="font-medium">✅ You&apos;ve paid your share.</p>
               </div>
             )}
             {isParticipant && !hasPaidData && (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2">
                 {!hasEnoughBalance && (
                   <p className="text-sm text-red-500 text-center">
                     Insufficient USDC balance ({userBalance !== undefined ? formatUSDC(userBalance) : '0'} available).
                   </p>
                 )}
-                {needsApproval ? (
-                  <button
-                    type="button"
-                    disabled={isPending || isMining || !hasEnoughBalance}
-                    onClick={handleApprove}
-                    className="w-full py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-zinc-300 dark:disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-medium transition-colors"
-                  >
-                    {phase === 'approving' && isPending && 'Confirm in wallet…'}
-                    {phase === 'approving' && isMining && 'Approving USDC…'}
-                    {phase !== 'approving' && `1/2 · Approve $${formatUSDC(amountPerPerson!)} USDC`}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={isPending || isMining || !hasEnoughBalance}
-                    onClick={handlePay}
-                    className="w-full py-3 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-zinc-300 dark:disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-medium transition-colors"
-                  >
-                    {phase === 'paying' && isPending && 'Confirm in wallet…'}
-                    {phase === 'paying' && isMining && 'Paying…'}
-                    {phase !== 'paying' && `2/2 · Pay $${formatUSDC(amountPerPerson!)}`}
-                  </button>
+                <button
+                  type="button"
+                  disabled={isPending || isMining || !hasEnoughBalance}
+                  onClick={handlePay}
+                  className="w-full py-4 rounded-xl bg-[#0052ff] hover:bg-[#0040cc] disabled:bg-zinc-200 dark:disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-semibold transition-colors shadow-lg shadow-[#0052ff]/20 disabled:shadow-none"
+                >
+                  {isPending
+                    ? 'Confirm in wallet…'
+                    : isMining
+                      ? 'Processing…'
+                      : `Pay $${formatUSDC(amountPerPerson!)} USDC`}
+                </button>
+                {needsApproval && !isPending && !isMining && (
+                  <p className="text-[11px] text-zinc-500 text-center px-2">
+                    One tap. Approve + pay happen in a single signature on Smart Wallet.
+                  </p>
                 )}
               </div>
             )}
@@ -298,6 +298,61 @@ export default function SplitClient({ idParam }: Props) {
           <p className="text-sm text-red-500 break-words">{error.message.split('\n')[0]}</p>
         )}
       </main>
+
+      {showSuccess && amountPerPerson !== undefined && creator && (
+        <PaidSuccessModal
+          amount={amountPerPerson}
+          recipient={creator as `0x${string}`}
+          onClose={() => setShowSuccess(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function PaidSuccessModal({
+  amount,
+  recipient,
+  onClose,
+}: {
+  amount: bigint;
+  recipient: `0x${string}`;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6 animate-in fade-in duration-200">
+      <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-zinc-900 p-6 flex flex-col items-center gap-4 shadow-2xl">
+        <div className="w-20 h-20 rounded-full bg-green-500/15 flex items-center justify-center">
+          <svg
+            width="44"
+            height="44"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#22c55e"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </div>
+        <div className="text-center">
+          <h2 className="text-3xl font-bold text-zinc-900 dark:text-white">
+            Paid ${formatUSDC(amount)}
+          </h2>
+          <p className="text-sm text-zinc-500 mt-1 flex items-center justify-center gap-1.5">
+            Sent to{' '}
+            <Name address={recipient} chain={base} className="font-medium text-zinc-700 dark:text-zinc-300" />
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full py-3 rounded-xl bg-[#0052ff] hover:bg-[#0040cc] text-white font-semibold"
+        >
+          Done
+        </button>
+      </div>
     </div>
   );
 }
