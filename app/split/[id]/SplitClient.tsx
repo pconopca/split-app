@@ -92,7 +92,7 @@ export default function SplitClient({ idParam }: Props) {
     query: { enabled: !!address },
   });
 
-  const { data: hasPaidData } = useReadContract({
+  const { data: hasPaidData, refetch: refetchHasPaid } = useReadContract({
     address: splitRegistry,
     abi: SPLIT_REGISTRY_ABI,
     functionName: 'hasPaid',
@@ -122,8 +122,9 @@ export default function SplitClient({ idParam }: Props) {
     refetchSplit();
     refetchPaid();
     refetchAllowance();
+    refetchHasPaid();
     setShowSuccess(true);
-  }, [justSucceeded, refetchSplit, refetchPaid, refetchAllowance]);
+  }, [justSucceeded, refetchSplit, refetchPaid, refetchAllowance, refetchHasPaid]);
 
   function handlePay() {
     if (splitId === null || amountPerPerson === undefined) return;
