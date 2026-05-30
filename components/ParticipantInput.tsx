@@ -1,10 +1,11 @@
 'use client';
 
 import { useAddress } from '@coinbase/onchainkit/identity';
-import { base } from 'wagmi/chains';
+import { mainnet } from 'wagmi/chains';
 import { isAddress } from 'viem';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFriends, shortAddress } from '@/lib/friends';
+import { isBasename, useBasenameAddress } from '@/lib/basename';
 
 type Props = {
   value: string;
@@ -31,16 +32,25 @@ export function ParticipantInput({ value, onChange, onResolved, onRemove, placeh
       )
       .slice(0, 5);
   }, [focused, trimmed, friends]);
-  const looksLikeBasename = useMemo(
-    () => trimmed.toLowerCase().endsWith('.base.eth') || trimmed.toLowerCase().endsWith('.eth'),
-    [trimmed]
-  );
   const isHexAddress = isAddress(trimmed);
-
-  const { data: resolved, isLoading } = useAddress(
-    { name: trimmed, chain: base },
-    { enabled: looksLikeBasename && trimmed.length > 5 }
+  const trimmedIsBasename = useMemo(() => isBasename(trimmed), [trimmed]);
+  const looksLikeEns = useMemo(
+    () => !trimmedIsBasename && trimmed.toLowerCase().endsWith('.eth') && trimmed.length > 5,
+    [trimmed, trimmedIsBasename],
   );
+
+  // .base.eth → resolve directly on Base L2 Resolver (fast, reliable).
+  // .eth (plain ENS) → fall back to OnchainKit / Ethereum mainnet.
+  const { data: basenameAddress, isLoading: basenameLoading } =
+    useBasenameAddress(trimmedIsBasename ? trimmed : undefined);
+  const { data: ensAddress, isLoading: ensLoading } = useAddress(
+    { name: trimmed, chain: mainnet },
+    { enabled: looksLikeEns },
+  );
+
+  const resolved = trimmedIsBasename ? basenameAddress : ensAddress;
+  const isLoading = trimmedIsBasename ? basenameLoading : ensLoading;
+  const looksLikeBasename = trimmedIsBasename || looksLikeEns;
 
   const finalAddress: `0x${string}` | null = isHexAddress
     ? (trimmed as `0x${string}`)
