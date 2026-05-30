@@ -10,7 +10,8 @@ import {
   ACTIVE_CHAIN,
 } from './contract';
 
-const MAX_BLOCK_RANGE = 10_000n;
+// Base Sepolia public RPC limits getLogs to 2000 blocks per request.
+const MAX_BLOCK_RANGE = 2_000n;
 
 export type UserSplit = {
   id: bigint;
@@ -48,23 +49,28 @@ export function useUserSplits(userAddress: `0x${string}` | undefined) {
         if (!publicClient || !userAddress) return;
 
         // Public RPCs reject 'earliest' on long-lived chains, so scan
-        // from the contract's known deployment block in <=10k block chunks.
+        // from the contract's known deployment block in fixed-size chunks.
         const fromBlock = SPLIT_REGISTRY_DEPLOY_BLOCK[ACTIVE_CHAIN.id] ?? 0n;
         const toBlock = await publicClient.getBlockNumber();
-        const logs: Awaited<ReturnType<typeof publicClient.getLogs<typeof SPLIT_CREATED_EVENT>>> = [];
+        const ranges: { from: bigint; to: bigint }[] = [];
         let cursor = fromBlock;
         while (cursor <= toBlock) {
           const end =
             cursor + MAX_BLOCK_RANGE - 1n > toBlock ? toBlock : cursor + MAX_BLOCK_RANGE - 1n;
-          const chunk = await publicClient.getLogs({
-            address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
-            event: SPLIT_CREATED_EVENT,
-            fromBlock: cursor,
-            toBlock: end,
-          });
-          logs.push(...chunk);
+          ranges.push({ from: cursor, to: end });
           cursor = end + 1n;
         }
+        const chunks = await Promise.all(
+          ranges.map((r) =>
+            publicClient.getLogs({
+              address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
+              event: SPLIT_CREATED_EVENT,
+              fromBlock: r.from,
+              toBlock: r.to,
+            }),
+          ),
+        );
+        const logs = chunks.flat();
 
         const lowerUser = userAddress.toLowerCase();
 
