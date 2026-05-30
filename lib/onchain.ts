@@ -31,9 +31,8 @@ export async function readSplit(splitId: bigint): Promise<SplitView | null> {
 }
 
 export function chainExplorerTxUrl(txHash: `0x${string}`): string {
-  return ACTIVE_CHAIN.id === base.id
-    ? `https://basescan.org/tx/${txHash}`
-    : ACTIVE_CHAIN.id === baseSepolia.id
-      ? `https://sepolia.basescan.org/tx/${txHash}`
-      : `https://etherscan.io/tx/${txHash}`;
+  const id: number = ACTIVE_CHAIN.id;
+  if (id === base.id) return `https://basescan.org/tx/${txHash}`;
+  if (id === baseSepolia.id) return `https://sepolia.basescan.org/tx/${txHash}`;
+  return `https://etherscan.io/tx/${txHash}`;
 }
