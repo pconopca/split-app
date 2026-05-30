@@ -27,6 +27,8 @@ export type UserSplit = {
    * 'both' = user created AND is a participant.
    */
   role: 'creator' | 'participant' | 'both';
+  /** Whether the connected user has paid their share on this split. */
+  hasPaidByUser: boolean;
 };
 
 const SPLIT_CREATED_EVENT = parseAbiItem(
@@ -95,15 +97,24 @@ export function useUserSplits(userAddress: `0x${string}` | undefined) {
             return isCreator || isParticipant;
           });
 
-        // Fetch current paidCount for each candidate.
+        // Fetch current paidCount + per-user hasPaid for each candidate.
         const enriched: UserSplit[] = await Promise.all(
           candidates.map(async (c) => {
-            const [, , participants, paidCount, memo] = await publicClient.readContract({
-              address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
-              abi: SPLIT_REGISTRY_ABI,
-              functionName: 'getSplit',
-              args: [c.splitId],
-            });
+            const [splitTuple, hasPaidByUser] = await Promise.all([
+              publicClient.readContract({
+                address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
+                abi: SPLIT_REGISTRY_ABI,
+                functionName: 'getSplit',
+                args: [c.splitId],
+              }),
+              publicClient.readContract({
+                address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
+                abi: SPLIT_REGISTRY_ABI,
+                functionName: 'hasPaid',
+                args: [c.splitId, userAddress],
+              }),
+            ]);
+            const [, , participants, paidCount, memo] = splitTuple;
             const isCreator = c.creator.toLowerCase() === lowerUser;
             const isParticipant = participants.some(
               (p) => p.toLowerCase() === lowerUser,
@@ -123,6 +134,7 @@ export function useUserSplits(userAddress: `0x${string}` | undefined) {
               memo,
               createdBlock: c.createdBlock,
               role,
+              hasPaidByUser,
             };
           }),
         );

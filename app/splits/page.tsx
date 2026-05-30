@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@/components/ConnectButton';
 import { useUserSplits, type UserSplit } from '@/lib/useUserSplits';
@@ -10,9 +11,26 @@ import { formatUSDC } from '@/lib/usdc';
 type Tab = 'created' | 'participant';
 
 export default function SplitsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SplitsPageInner />
+    </Suspense>
+  );
+}
+
+function SplitsPageInner() {
   const { address, isConnected } = useAccount();
   const { splits, isLoading, error } = useUserSplits(address);
-  const [tab, setTab] = useState<Tab>('created');
+  const searchParams = useSearchParams();
+  const initialTab: Tab = searchParams.get('tab') === 'participant' ? 'participant' : 'created';
+  const [tab, setTab] = useState<Tab>(initialTab);
+
+  // Keep the tab in sync when the user navigates back to /splits with a
+  // different ?tab= query string (e.g. clicking another card on home).
+  useEffect(() => {
+    const next = searchParams.get('tab') === 'participant' ? 'participant' : 'created';
+    setTab(next);
+  }, [searchParams]);
 
   const created = splits.filter((s) => s.role === 'creator' || s.role === 'both');
   const asParticipant = splits.filter((s) => s.role === 'participant' || s.role === 'both');
