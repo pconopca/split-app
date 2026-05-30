@@ -97,7 +97,7 @@ export const SPLIT_REGISTRY_ABI = [
 ] as const;
 
 export const SPLIT_REGISTRY_ADDRESS: Record<number, `0x${string}`> = {
-  [baseSepolia.id]: '0xf39820b22C4eebFEef68B30198a0e6FF2228f562',
+  [baseSepolia.id]: '0xF39820b22C4EEbFeef68B30198a0e6FF2228f562',
   // [base.id]: '0x...', // fill after mainnet deploy
 };
 
