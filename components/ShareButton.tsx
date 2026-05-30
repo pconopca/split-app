@@ -10,32 +10,63 @@ type Props = {
   variant?: 'primary' | 'secondary';
 };
 
+function isMobile(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      /* fallthrough to legacy */
+    }
+  }
+  // Legacy fallback (works without secure context on older browsers).
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export function ShareButton({ url, title, text, className, variant = 'primary' }: Props) {
-  const [canShare, setCanShare] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [mobile, setMobile] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   useEffect(() => {
-    setCanShare(typeof navigator !== 'undefined' && 'share' in navigator);
+    setMobile(isMobile());
   }, []);
 
   async function handleClick() {
-    const payload = { title: title ?? 'Split', text: text ?? '', url };
-    try {
-      if (canShare && navigator.share) {
-        await navigator.share(payload);
-        return;
-      }
-    } catch (err) {
-      // User cancelled or share failed — fall through to copy.
-      if ((err as Error)?.name === 'AbortError') return;
+    const fullText = text ? `${text}\n${url}` : url;
+
+    // Always copy to clipboard so the user has the link as a guaranteed result.
+    const copied = await copyToClipboard(fullText);
+
+    // On mobile, also offer the native share sheet (don't await failure).
+    if (mobile && typeof navigator !== 'undefined' && navigator.share) {
+      navigator.share({ title: title ?? 'Split', text: text ?? '', url }).catch(() => {
+        /* user dismissed or share unsupported — clipboard already copied */
+      });
     }
 
-    try {
-      await navigator.clipboard.writeText(text ? `${text}\n${url}` : url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch {
-      // Last resort: prompt the user with the link.
+    setStatus(copied ? 'copied' : 'failed');
+    setTimeout(() => setStatus('idle'), 1800);
+
+    if (!copied) {
+      // Worst case: surface the URL in a prompt so user can copy manually.
       window.prompt('Copy this link:', url);
     }
   }
@@ -49,11 +80,15 @@ export function ShareButton({ url, title, text, className, variant = 'primary' }
 
   return (
     <button type="button" onClick={handleClick} className={`${base} ${styles} ${className ?? ''}`}>
-      {copied ? (
+      {status === 'copied' ? (
         <>
-          <CheckIcon /> Copied!
+          <CheckIcon /> Link copied!
         </>
-      ) : canShare ? (
+      ) : status === 'failed' ? (
+        <>
+          <LinkIcon /> Copy failed
+        </>
+      ) : mobile ? (
         <>
           <ShareIcon /> Share with friends
         </>
