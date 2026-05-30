@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useFriends, shortAddress } from '@/lib/friends';
-import { useName } from '@coinbase/onchainkit/identity';
-import { base } from 'wagmi/chains';
+import { useAddressBasename } from '@/lib/basename';
 
 type Props = { addresses: `0x${string}`[] };
 
@@ -37,7 +36,7 @@ function SaveRow({
   address: `0x${string}`;
   onSave: (nick: string) => void;
 }) {
-  const { data: basename } = useName({ address, chain: base });
+  const { data: basename } = useAddressBasename(address);
   const [nick, setNick] = useState('');
   const [saved, setSaved] = useState(false);
 

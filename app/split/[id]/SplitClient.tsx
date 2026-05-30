@@ -186,6 +186,32 @@ export default function SplitClient({ idParam }: Props) {
     return <Centered>Split #{idParam} not found.</Centered>;
   }
 
+  // Privacy gate: split details are visible only to creator + participants.
+  // (Note: the contract is public — anyone can read it via Basescan or RPC —
+  // but the app refuses to render details to non-involved viewers.)
+  if (!isConnected) {
+    return (
+      <Gated
+        idParam={idParam}
+        title="Private split"
+        body="Connect the wallet that was added to this split to view it."
+      >
+        <ConnectButton />
+      </Gated>
+    );
+  }
+  if (!isCreator && !isParticipant) {
+    return (
+      <Gated
+        idParam={idParam}
+        title="You're not in this split"
+        body="Only the creator and the listed participants can see the details. If you think this is a mistake, ask the creator to share the right link."
+      >
+        <ConnectButton />
+      </Gated>
+    );
+  }
+
   return (
     <div className="flex flex-col flex-1 bg-zinc-50 dark:bg-black p-6">
       <main className="w-full max-w-md mx-auto flex flex-col gap-6">
@@ -244,6 +270,57 @@ function Centered({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-1 items-center justify-center p-6 text-sm text-zinc-500">
       {children}
+    </div>
+  );
+}
+
+function Gated({
+  idParam,
+  title,
+  body,
+  children,
+}: {
+  idParam: string;
+  title: string;
+  body: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col flex-1 bg-zinc-50 dark:bg-black p-6">
+      <main className="w-full max-w-md mx-auto flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
+            ← Home
+          </Link>
+          <ConnectButton />
+        </div>
+        <div className="flex flex-col items-center gap-4 py-12 text-center">
+          <div className="w-14 h-14 rounded-full bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center">
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-zinc-400"
+            >
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+          <div className="flex flex-col gap-1">
+            <p className="text-xs text-zinc-500 font-medium uppercase tracking-wide">
+              Split #{idParam}
+            </p>
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">{title}</h1>
+            <p className="text-sm text-zinc-500 max-w-sm">{body}</p>
+          </div>
+          {children}
+        </div>
+      </main>
     </div>
   );
 }
