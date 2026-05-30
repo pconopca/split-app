@@ -75,6 +75,16 @@ export const SPLIT_REGISTRY_ADDRESS: Record<number, `0x${string}`> = {
   // [base.id]: '0x...', // fill after mainnet deploy
 };
 
+/**
+ * Block at which the SplitRegistry was deployed on each chain.
+ * Used as the lower bound for getLogs queries — public RPCs reject
+ * scanning from 'earliest' over long ranges.
+ */
+export const SPLIT_REGISTRY_DEPLOY_BLOCK: Record<number, bigint> = {
+  [baseSepolia.id]: 42168525n,
+  // [base.id]: 0n, // fill after mainnet deploy
+};
+
 export const USDC_ADDRESS: Record<number, `0x${string}`> = {
   [baseSepolia.id]: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
   [base.id]: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',

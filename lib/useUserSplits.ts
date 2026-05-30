@@ -3,7 +3,14 @@
 import { useEffect, useState } from 'react';
 import { usePublicClient } from 'wagmi';
 import { parseAbiItem } from 'viem';
-import { SPLIT_REGISTRY_ABI, SPLIT_REGISTRY_ADDRESS, ACTIVE_CHAIN } from './contract';
+import {
+  SPLIT_REGISTRY_ABI,
+  SPLIT_REGISTRY_ADDRESS,
+  SPLIT_REGISTRY_DEPLOY_BLOCK,
+  ACTIVE_CHAIN,
+} from './contract';
+
+const MAX_BLOCK_RANGE = 10_000n;
 
 export type UserSplit = {
   id: bigint;
@@ -40,15 +47,24 @@ export function useUserSplits(userAddress: `0x${string}` | undefined) {
       try {
         if (!publicClient || !userAddress) return;
 
-        // Read all SplitCreated events from the contract.
-        // For an MVP this scans from the contract's deployment block (recent).
-        // A production app would use a subgraph or persist last-seen block.
-        const logs = await publicClient.getLogs({
-          address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
-          event: SPLIT_CREATED_EVENT,
-          fromBlock: 'earliest',
-          toBlock: 'latest',
-        });
+        // Public RPCs reject 'earliest' on long-lived chains, so scan
+        // from the contract's known deployment block in <=10k block chunks.
+        const fromBlock = SPLIT_REGISTRY_DEPLOY_BLOCK[ACTIVE_CHAIN.id] ?? 0n;
+        const toBlock = await publicClient.getBlockNumber();
+        const logs: Awaited<ReturnType<typeof publicClient.getLogs<typeof SPLIT_CREATED_EVENT>>> = [];
+        let cursor = fromBlock;
+        while (cursor <= toBlock) {
+          const end =
+            cursor + MAX_BLOCK_RANGE - 1n > toBlock ? toBlock : cursor + MAX_BLOCK_RANGE - 1n;
+          const chunk = await publicClient.getLogs({
+            address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
+            event: SPLIT_CREATED_EVENT,
+            fromBlock: cursor,
+            toBlock: end,
+          });
+          logs.push(...chunk);
+          cursor = end + 1n;
+        }
 
         const lowerUser = userAddress.toLowerCase();
 
