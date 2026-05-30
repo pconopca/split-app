@@ -6,18 +6,28 @@ import { base } from 'wagmi/chains';
 import { namehash } from 'viem/ens';
 
 /**
- * Basenames live on the Base L2 Resolver. OnchainKit's useAddress resolves
- * everything through Ethereum mainnet ENS via CCIP-Read, which has been
- * flaky from the browser (Cloudflare 522/526 on public RPCs). For .base.eth
- * we skip ENS entirely and query the L2 Resolver on Base mainnet directly —
- * one lightweight readContract, no gateways.
+ * Basenames live on a Base-native ENS registry. Each name can declare its
+ * own resolver contract (not always the default L2 Resolver) — so we have
+ * to do a two-step lookup:
+ *   1. Ask the registry which resolver this name uses.
+ *   2. Ask that resolver for the address.
  *
- * Official resolver address from Coinbase's identity constants:
- * https://github.com/coinbase/onchainkit
+ * This bypasses Ethereum mainnet ENS + CCIP-Read entirely, which has been
+ * unreliable from the browser (Cloudflare 522/526 on public mainnet RPCs).
  */
-const BASE_L2_RESOLVER = '0xC6d566A56A1aFf6508b41f6c90ff131615583BCD' as const;
+const BASE_REGISTRY = '0xB94704422c2a1E396835A571837Aa5AE53285a95' as const;
 
-const L2_RESOLVER_ABI = [
+const REGISTRY_ABI = [
+  {
+    type: 'function',
+    name: 'resolver',
+    inputs: [{ name: 'node', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+  },
+] as const;
+
+const RESOLVER_ABI = [
   {
     type: 'function',
     name: 'addr',
@@ -42,13 +52,28 @@ export function useBasenameAddress(name: string | undefined) {
     queryFn: async () => {
       if (!name || !publicClient) return null;
       const node = namehash(name);
-      const result = (await publicClient.readContract({
-        address: BASE_L2_RESOLVER,
-        abi: L2_RESOLVER_ABI,
-        functionName: 'addr',
+
+      const resolver = (await publicClient.readContract({
+        address: BASE_REGISTRY,
+        abi: REGISTRY_ABI,
+        functionName: 'resolver',
         args: [node],
       })) as `0x${string}`;
-      return result === ZERO_ADDRESS ? null : result;
+      if (!resolver || resolver === ZERO_ADDRESS) return null;
+
+      try {
+        const addr = (await publicClient.readContract({
+          address: resolver,
+          abi: RESOLVER_ABI,
+          functionName: 'addr',
+          args: [node],
+        })) as `0x${string}`;
+        return addr === ZERO_ADDRESS ? null : addr;
+      } catch {
+        // Resolver might not implement addr(bytes32) (e.g. it expects
+        // addr(bytes32,uint256) for multi-chain). Treat as unresolvable.
+        return null;
+      }
     },
   });
 }
