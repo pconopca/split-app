@@ -1,61 +1,83 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { decodeEventLog, parseUnits } from 'viem';
 import Link from 'next/link';
 import { ConnectButton } from '@/components/ConnectButton';
 import { SPLIT_REGISTRY_ABI, SPLIT_REGISTRY_ADDRESS, ACTIVE_CHAIN } from '@/lib/contract';
 import { ParticipantInput } from '@/components/ParticipantInput';
+import { SaveFriendsPrompt } from '@/components/SaveFriendsPrompt';
+import { formatUSDC } from '@/lib/usdc';
 
-type Row = {
-  id: string;
-  raw: string;
-  resolved: `0x${string}` | null;
-};
+type Row = { id: string; raw: string; resolved: `0x${string}` | null };
 
 function uid() {
   return Math.random().toString(36).slice(2, 9);
 }
 
+type Step = 1 | 2 | 3;
+
 export default function NewSplitPage() {
   const { isConnected, chainId } = useAccount();
-  const [amount, setAmount] = useState('');
-  const [rows, setRows] = useState<Row[]>([
-    { id: uid(), raw: '', resolved: null },
-    { id: uid(), raw: '', resolved: null },
-  ]);
+  const wrongChain = isConnected && chainId !== ACTIVE_CHAIN.id;
 
-  const { writeContract, data: txHash, isPending, error } = useWriteContract();
-  const { data: receipt, isLoading: isMining } = useWaitForTransactionReceipt({ hash: txHash });
+  const [step, setStep] = useState<Step>(1);
 
-  const amountPerPersonUSDC = (() => {
-    const n = Number(amount);
-    if (!Number.isFinite(n) || n <= 0) return null;
+  // Step 1 state
+  const [totalInput, setTotalInput] = useState('');
+  const [peopleCount, setPeopleCount] = useState(2);
+  const [includeMe, setIncludeMe] = useState(true);
+
+  const totalUSDC = (() => {
+    if (!totalInput) return null;
     try {
-      return parseUnits(amount, 6);
+      const n = Number(totalInput);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      return parseUnits(totalInput, 6);
     } catch {
       return null;
     }
   })();
 
-  const resolvedAddresses = rows
-    .map((r) => r.resolved)
-    .filter((a): a is `0x${string}` => !!a);
+  const perPersonUSDC =
+    totalUSDC !== null && peopleCount > 0 ? totalUSDC / BigInt(peopleCount) : null;
+  const remainder = totalUSDC !== null && perPersonUSDC !== null
+    ? totalUSDC - perPersonUSDC * BigInt(peopleCount)
+    : 0n;
 
-  const dedupedAddresses = Array.from(new Set(resolvedAddresses.map((a) => a.toLowerCase()))) as `0x${string}`[];
+  const friendsNeeded = includeMe ? peopleCount - 1 : peopleCount;
 
-  const canSubmit =
-    isConnected &&
-    amountPerPersonUSDC !== null &&
-    dedupedAddresses.length > 0 &&
-    dedupedAddresses.length === resolvedAddresses.length &&
-    !isPending &&
-    !isMining;
+  // Step 2 state — initialized when entering step 2
+  const [rows, setRows] = useState<Row[]>([]);
 
-  const wrongChain = isConnected && chainId !== ACTIVE_CHAIN.id;
+  function ensureRows(count: number) {
+    setRows((prev) => {
+      const next = [...prev];
+      while (next.length < count) next.push({ id: uid(), raw: '', resolved: null });
+      while (next.length > count) next.pop();
+      return next;
+    });
+  }
 
-  const createdSplitId = (() => {
+  function updateRow(id: string, patch: Partial<Row>) {
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  const resolvedAddresses = rows.map((r) => r.resolved).filter((a): a is `0x${string}` => !!a);
+  const dedupedAddresses = Array.from(
+    new Set(resolvedAddresses.map((a) => a.toLowerCase())),
+  ) as `0x${string}`[];
+  const allValid =
+    rows.length === friendsNeeded &&
+    dedupedAddresses.length === friendsNeeded &&
+    resolvedAddresses.length === friendsNeeded;
+
+  // Step 3 — contract write
+  const { writeContract, data: txHash, isPending, error, reset } = useWriteContract();
+  const { data: receipt, isLoading: isMining } = useWaitForTransactionReceipt({ hash: txHash });
+
+  const createdSplitId = useMemo(() => {
     if (!receipt) return null;
     for (const log of receipt.logs) {
       try {
@@ -64,154 +86,458 @@ export default function NewSplitPage() {
           data: log.data,
           topics: log.topics,
         });
-        if (decoded.eventName === 'SplitCreated') {
-          return decoded.args.splitId;
-        }
+        if (decoded.eventName === 'SplitCreated') return decoded.args.splitId;
       } catch {
-        // not our event
+        /* not our event */
       }
     }
     return null;
-  })();
+  }, [receipt]);
 
-  function updateRow(id: string, patch: Partial<Row>) {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  }
-  function addRow() {
-    setRows((prev) => [...prev, { id: uid(), raw: '', resolved: null }]);
-  }
-  function removeRow(id: string) {
-    setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.id !== id) : prev));
+  function goToStep2() {
+    ensureRows(friendsNeeded);
+    setStep(2);
   }
 
   function handleSubmit() {
-    if (!canSubmit || amountPerPersonUSDC === null) return;
-    const contractAddress = SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id];
+    if (perPersonUSDC === null || !allValid) return;
+    reset();
     writeContract({
-      address: contractAddress,
+      address: SPLIT_REGISTRY_ADDRESS[ACTIVE_CHAIN.id],
       abi: SPLIT_REGISTRY_ABI,
       functionName: 'createSplit',
-      args: [amountPerPersonUSDC, dedupedAddresses],
+      args: [perPersonUSDC, dedupedAddresses],
       chainId: ACTIVE_CHAIN.id,
     });
   }
 
-  return (
-    <div className="flex flex-col flex-1 bg-zinc-50 dark:bg-black p-6">
-      <main className="w-full max-w-md mx-auto flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
-            ← Back
-          </Link>
-          <ConnectButton />
-        </div>
+  const canAdvanceFrom1 = totalUSDC !== null && peopleCount >= 2 && friendsNeeded >= 1;
 
-        <div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">New split</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Each participant pays the amount below in USDC.
-          </p>
-        </div>
+  return (
+    <div className="flex flex-col flex-1 bg-white dark:bg-[#0a0e1a]">
+      <header className="w-full px-6 py-4 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800">
+        <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
+          ← Home
+        </Link>
+        <ConnectButton />
+      </header>
+
+      <main className="flex-1 w-full max-w-md mx-auto px-6 py-6 flex flex-col gap-6">
+        <StepIndicator current={step} />
 
         {wrongChain && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/40 p-3 text-sm text-amber-800 dark:text-amber-200">
-            Wallet is on chain {chainId}. Switch to <strong>{ACTIVE_CHAIN.name}</strong> to continue.
+            Wallet is on chain {chainId}. Switch to <strong>{ACTIVE_CHAIN.name}</strong>.
           </div>
         )}
 
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Amount per person (USDC)
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">$</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="20.00"
-              className="w-full pl-7 pr-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-base font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Participants
-            </label>
-            <span className="text-xs text-zinc-500">
-              {dedupedAddresses.length} valid
-            </span>
-          </div>
-          <div className="flex flex-col gap-3">
-            {rows.map((row) => (
-              <ParticipantInput
-                key={row.id}
-                value={row.raw}
-                onChange={(raw) => updateRow(row.id, { raw })}
-                onResolved={(resolved) => updateRow(row.id, { resolved })}
-                onRemove={rows.length > 1 ? () => removeRow(row.id) : undefined}
-              />
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={addRow}
-            className="self-start text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400"
-          >
-            + Add participant
-          </button>
-        </div>
-
-        {!isConnected ? (
-          <ConnectButton />
-        ) : (
-          <button
-            type="button"
-            disabled={!canSubmit}
-            onClick={handleSubmit}
-            className="w-full py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-zinc-300 dark:disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-medium transition-colors"
-          >
-            {isPending
-              ? 'Confirm in wallet…'
-              : isMining
-                ? 'Creating split…'
-                : 'Create split'}
-          </button>
+        {step === 1 && (
+          <Step1
+            totalInput={totalInput}
+            setTotalInput={setTotalInput}
+            peopleCount={peopleCount}
+            setPeopleCount={setPeopleCount}
+            includeMe={includeMe}
+            setIncludeMe={setIncludeMe}
+            perPersonUSDC={perPersonUSDC}
+            remainder={remainder}
+            canAdvance={canAdvanceFrom1}
+            onNext={goToStep2}
+            isConnected={isConnected}
+          />
         )}
 
-        {error && (
-          <p className="text-sm text-red-500 break-words">
-            {error.message.split('\n')[0]}
-          </p>
+        {step === 2 && (
+          <Step2
+            rows={rows}
+            updateRow={updateRow}
+            friendsNeeded={friendsNeeded}
+            includeMe={includeMe}
+            allValid={allValid}
+            onBack={() => setStep(1)}
+            onNext={() => setStep(3)}
+          />
         )}
 
-        {createdSplitId !== null && (
-          <div className="rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/40 p-4 text-sm text-green-800 dark:text-green-200 flex flex-col gap-3">
-            <p className="font-medium">✅ Split #{createdSplitId.toString()} created</p>
-            <Link
-              href={`/split/${createdSplitId.toString()}`}
-              className="block w-full text-center py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium"
-            >
-              Open split →
-            </Link>
-            {txHash && (
-              <a
-                href={`https://sepolia.basescan.org/tx/${txHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs underline break-all"
-              >
-                View transaction on Basescan
-              </a>
-            )}
-          </div>
+        {step === 3 && (
+          <Step3
+            totalUSDC={totalUSDC}
+            perPersonUSDC={perPersonUSDC}
+            peopleCount={peopleCount}
+            includeMe={includeMe}
+            participants={dedupedAddresses}
+            isPending={isPending}
+            isMining={isMining}
+            error={error}
+            createdSplitId={createdSplitId}
+            txHash={txHash}
+            onBack={() => setStep(2)}
+            onSubmit={handleSubmit}
+          />
         )}
       </main>
+    </div>
+  );
+}
+
+function StepIndicator({ current }: { current: Step }) {
+  const steps: { n: Step; label: string }[] = [
+    { n: 1, label: 'Amount' },
+    { n: 2, label: 'Friends' },
+    { n: 3, label: 'Confirm' },
+  ];
+  return (
+    <div className="flex items-center gap-2">
+      {steps.map((s, i) => (
+        <div key={s.n} className="flex items-center flex-1 gap-2">
+          <div
+            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
+              current >= s.n
+                ? 'bg-[#0052ff] text-white'
+                : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500'
+            }`}
+          >
+            {s.n}
+          </div>
+          <span
+            className={`text-xs font-medium ${
+              current === s.n
+                ? 'text-zinc-900 dark:text-white'
+                : 'text-zinc-500'
+            }`}
+          >
+            {s.label}
+          </span>
+          {i < steps.length - 1 && (
+            <div
+              className={`flex-1 h-px ${
+                current > s.n ? 'bg-[#0052ff]' : 'bg-zinc-200 dark:bg-zinc-800'
+              }`}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type Step1Props = {
+  totalInput: string;
+  setTotalInput: (v: string) => void;
+  peopleCount: number;
+  setPeopleCount: (v: number) => void;
+  includeMe: boolean;
+  setIncludeMe: (v: boolean) => void;
+  perPersonUSDC: bigint | null;
+  remainder: bigint;
+  canAdvance: boolean;
+  onNext: () => void;
+  isConnected: boolean;
+};
+
+function Step1({
+  totalInput,
+  setTotalInput,
+  peopleCount,
+  setPeopleCount,
+  includeMe,
+  setIncludeMe,
+  perPersonUSDC,
+  remainder,
+  canAdvance,
+  onNext,
+  isConnected,
+}: Step1Props) {
+  return (
+    <>
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">How much, and with whom?</h1>
+        <p className="text-sm text-zinc-500 mt-1">We&apos;ll calculate each person&apos;s share.</p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Total bill
+        </label>
+        <div className="relative">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-zinc-400 font-light">$</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0"
+            value={totalInput}
+            onChange={(e) => setTotalInput(e.target.value)}
+            placeholder="80.00"
+            className="w-full pl-10 pr-4 py-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-3xl font-bold text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0052ff] focus:border-transparent"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Number of people
+        </label>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setPeopleCount(Math.max(2, peopleCount - 1))}
+            className="w-12 h-12 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-xl font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+          >
+            −
+          </button>
+          <div className="flex-1 text-center text-3xl font-bold text-zinc-900 dark:text-white py-2">
+            {peopleCount}
+          </div>
+          <button
+            type="button"
+            onClick={() => setPeopleCount(Math.min(50, peopleCount + 1))}
+            className="w-12 h-12 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-xl font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      <label className="flex items-center justify-between p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 cursor-pointer">
+        <div className="flex flex-col">
+          <span className="text-sm font-medium text-zinc-900 dark:text-white">
+            I&apos;m one of them
+          </span>
+          <span className="text-xs text-zinc-500 mt-0.5">
+            {includeMe
+              ? `You paid the bill — collect from ${Math.max(0, peopleCount - 1)} friends.`
+              : `You’re organizing — collect from ${peopleCount} friends.`}
+          </span>
+        </div>
+        <input
+          type="checkbox"
+          checked={includeMe}
+          onChange={(e) => setIncludeMe(e.target.checked)}
+          className="w-5 h-5 accent-[#0052ff]"
+        />
+      </label>
+
+      {perPersonUSDC !== null && (
+        <div className="rounded-xl bg-[#0052ff]/5 border border-[#0052ff]/20 p-4 flex flex-col items-center gap-1">
+          <span className="text-xs text-zinc-500 uppercase tracking-wide font-medium">Each pays</span>
+          <span className="text-4xl font-bold text-[#0052ff]">
+            ${formatUSDC(perPersonUSDC)}
+          </span>
+          {remainder > 0n && (
+            <span className="text-xs text-amber-600 dark:text-amber-400 text-center">
+              ${formatUSDC(remainder)} rounding goes to you
+            </span>
+          )}
+        </div>
+      )}
+
+      {!isConnected && (
+        <div className="flex justify-center">
+          <ConnectButton />
+        </div>
+      )}
+
+      <button
+        type="button"
+        disabled={!canAdvance || !isConnected}
+        onClick={onNext}
+        className="w-full py-4 rounded-xl bg-[#0052ff] hover:bg-[#0040cc] disabled:bg-zinc-200 dark:disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-semibold transition-colors shadow-lg shadow-[#0052ff]/20 disabled:shadow-none"
+      >
+        Next
+      </button>
+    </>
+  );
+}
+
+type Step2Props = {
+  rows: Row[];
+  updateRow: (id: string, patch: Partial<Row>) => void;
+  friendsNeeded: number;
+  includeMe: boolean;
+  allValid: boolean;
+  onBack: () => void;
+  onNext: () => void;
+};
+
+function Step2({ rows, updateRow, friendsNeeded, includeMe, allValid, onBack, onNext }: Step2Props) {
+  return (
+    <>
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">
+          Add {friendsNeeded} {friendsNeeded === 1 ? 'friend' : 'friends'}
+        </h1>
+        <p className="text-sm text-zinc-500 mt-1">
+          {includeMe
+            ? 'You’ll collect from them.'
+            : 'Each pays directly to you.'}
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {rows.map((row, i) => (
+          <div key={row.id} className="flex flex-col gap-1">
+            <span className="text-xs text-zinc-500 font-medium px-1">
+              Friend {i + 1}
+            </span>
+            <ParticipantInput
+              value={row.raw}
+              onChange={(raw) => updateRow(row.id, { raw })}
+              onResolved={(resolved) => updateRow(row.id, { resolved })}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-3 mt-auto">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex-1 py-4 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-semibold hover:bg-zinc-200 dark:hover:bg-zinc-700"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          disabled={!allValid}
+          onClick={onNext}
+          className="flex-1 py-4 rounded-xl bg-[#0052ff] hover:bg-[#0040cc] disabled:bg-zinc-200 dark:disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-semibold shadow-lg shadow-[#0052ff]/20 disabled:shadow-none"
+        >
+          Review
+        </button>
+      </div>
+    </>
+  );
+}
+
+type Step3Props = {
+  totalUSDC: bigint | null;
+  perPersonUSDC: bigint | null;
+  peopleCount: number;
+  includeMe: boolean;
+  participants: `0x${string}`[];
+  isPending: boolean;
+  isMining: boolean;
+  error: Error | null;
+  createdSplitId: bigint | null;
+  txHash: `0x${string}` | undefined;
+  onBack: () => void;
+  onSubmit: () => void;
+};
+
+function Step3({
+  totalUSDC,
+  perPersonUSDC,
+  peopleCount,
+  includeMe,
+  participants,
+  isPending,
+  isMining,
+  error,
+  createdSplitId,
+  txHash,
+  onBack,
+  onSubmit,
+}: Step3Props) {
+  if (createdSplitId !== null) {
+    return (
+      <div className="flex flex-col gap-6 py-4">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-16 h-16 rounded-full bg-[#0052ff]/10 flex items-center justify-center text-3xl">
+            ✅
+          </div>
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">
+              Split #{createdSplitId.toString()} created
+            </h2>
+            <p className="text-sm text-zinc-500 mt-1">Share the link with friends.</p>
+          </div>
+        </div>
+        <SaveFriendsPrompt addresses={participants} />
+        <Link
+          href={`/split/${createdSplitId.toString()}`}
+          className="w-full py-4 rounded-xl bg-[#0052ff] hover:bg-[#0040cc] text-white font-semibold text-center shadow-lg shadow-[#0052ff]/20"
+        >
+          Open split
+        </Link>
+        {txHash && (
+          <a
+            href={`https://sepolia.basescan.org/tx/${txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs underline text-zinc-500 text-center"
+          >
+            View transaction
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Review</h1>
+        <p className="text-sm text-zinc-500 mt-1">Confirm and create your split.</p>
+      </div>
+
+      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800">
+        <Row label="Total bill" value={totalUSDC !== null ? `$${formatUSDC(totalUSDC)}` : '—'} />
+        <Row label="People" value={`${peopleCount} ${includeMe ? '(you + ' + (peopleCount - 1) + ')' : ''}`} />
+        <Row
+          label="Each pays"
+          value={perPersonUSDC !== null ? `$${formatUSDC(perPersonUSDC)}` : '—'}
+          highlight
+        />
+        <div className="p-4 flex flex-col gap-2">
+          <span className="text-xs text-zinc-500 uppercase tracking-wide font-medium">Friends</span>
+          <ul className="flex flex-col gap-1">
+            {participants.map((p) => (
+              <li key={p} className="text-sm font-mono text-zinc-700 dark:text-zinc-300">
+                {p.slice(0, 6)}…{p.slice(-4)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {error && (
+        <p className="text-sm text-red-500 break-words">{error.message.split('\n')[0]}</p>
+      )}
+
+      <div className="flex gap-3 mt-auto">
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={isPending || isMining}
+          className="flex-1 py-4 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-semibold hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          disabled={isPending || isMining}
+          onClick={onSubmit}
+          className="flex-1 py-4 rounded-xl bg-[#0052ff] hover:bg-[#0040cc] disabled:bg-zinc-200 dark:disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-semibold shadow-lg shadow-[#0052ff]/20 disabled:shadow-none"
+        >
+          {isPending ? 'Confirm in wallet…' : isMining ? 'Creating…' : 'Create split'}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="p-4 flex items-center justify-between">
+      <span className="text-sm text-zinc-500">{label}</span>
+      <span
+        className={`text-sm font-semibold ${
+          highlight ? 'text-[#0052ff] text-base' : 'text-zinc-900 dark:text-white'
+        }`}
+      >
+        {value}
+      </span>
     </div>
   );
 }

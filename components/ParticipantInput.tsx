@@ -3,7 +3,8 @@
 import { useAddress } from '@coinbase/onchainkit/identity';
 import { base } from 'wagmi/chains';
 import { isAddress } from 'viem';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useFriends, shortAddress } from '@/lib/friends';
 
 type Props = {
   value: string;
@@ -15,6 +16,21 @@ type Props = {
 
 export function ParticipantInput({ value, onChange, onResolved, onRemove, placeholder }: Props) {
   const trimmed = value.trim();
+  const { friends, findByAddress } = useFriends();
+  const [focused, setFocused] = useState(false);
+
+  const suggestions = useMemo(() => {
+    if (!focused) return [];
+    const q = trimmed.toLowerCase();
+    if (!q) return friends.slice(0, 5);
+    return friends
+      .filter(
+        (f) =>
+          f.nick.toLowerCase().includes(q) ||
+          f.address.toLowerCase().includes(q),
+      )
+      .slice(0, 5);
+  }, [focused, trimmed, friends]);
   const looksLikeBasename = useMemo(
     () => trimmed.toLowerCase().endsWith('.base.eth') || trimmed.toLowerCase().endsWith('.eth'),
     [trimmed]
@@ -41,12 +57,15 @@ export function ParticipantInput({ value, onChange, onResolved, onRemove, placeh
     }
   }, [finalAddress]);
 
+  const friendMatch = finalAddress ? findByAddress(finalAddress) : null;
+
   const status = (() => {
     if (!trimmed) return null;
+    if (friendMatch) return { kind: 'ok' as const, label: `${friendMatch.nick} · saved friend` };
     if (isHexAddress) return { kind: 'ok' as const, label: 'Valid address' };
     if (looksLikeBasename && isLoading) return { kind: 'pending' as const, label: 'Resolving…' };
     if (looksLikeBasename && resolved) {
-      return { kind: 'ok' as const, label: `→ ${resolved.slice(0, 6)}…${resolved.slice(-4)}` };
+      return { kind: 'ok' as const, label: `→ ${shortAddress(resolved)}` };
     }
     if (looksLikeBasename && !isLoading && !resolved)
       return { kind: 'error' as const, label: 'Name not found' };
@@ -54,19 +73,45 @@ export function ParticipantInput({ value, onChange, onResolved, onRemove, placeh
   })();
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1 relative">
       <div className="flex gap-2 items-center">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder ?? 'alice.base.eth or 0x…'}
-          className="flex-1 px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-        />
+        <div className="relative flex-1">
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setTimeout(() => setFocused(false), 150)}
+            placeholder={placeholder ?? 'alice.base.eth or 0x…'}
+            className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm font-mono text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0052ff]"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+          />
+          {suggestions.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg z-20 overflow-hidden">
+              {suggestions.map((f) => (
+                <button
+                  key={f.address}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange(f.address);
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-between gap-2"
+                >
+                  <span className="text-sm font-medium text-zinc-900 dark:text-white truncate">
+                    {f.nick}
+                  </span>
+                  <span className="text-xs font-mono text-zinc-500 shrink-0">
+                    {shortAddress(f.address)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {onRemove && (
           <button
             type="button"
