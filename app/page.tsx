@@ -4,6 +4,7 @@ import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import { ConnectButton } from '@/components/ConnectButton';
 import { TotalsCards } from '@/components/TotalsCards';
+import { ACTIVE_CHAIN } from '@/lib/contract';
 
 export default function Home() {
   const { isConnected } = useAccount();
@@ -84,7 +85,7 @@ export default function Home() {
       </main>
 
       <footer className="px-6 py-4 text-center text-xs text-zinc-400">
-        Built on Base · {process.env.NEXT_PUBLIC_APP_URL ? 'Mainnet' : 'Sepolia'}
+        Built on {ACTIVE_CHAIN.name}
       </footer>
     </div>
   );

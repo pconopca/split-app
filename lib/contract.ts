@@ -98,12 +98,12 @@ export const SPLIT_REGISTRY_ABI = [
 
 export const SPLIT_REGISTRY_ADDRESS: Record<number, `0x${string}`> = {
   [baseSepolia.id]: '0xF39820b22C4EEbFeef68B30198a0e6FF2228f562',
-  // [base.id]: '0x...', // fill after mainnet deploy
+  [base.id]: '0x269Fac66f0003f7028d84D67a8faD5131146550F',
 };
 
 export const SPLIT_REGISTRY_DEPLOY_BLOCK: Record<number, bigint> = {
   [baseSepolia.id]: 42201397n,
-  // [base.id]: 0n,
+  [base.id]: 46695057n,
 };
 
 export const USDC_ADDRESS: Record<number, `0x${string}`> = {
@@ -111,6 +111,6 @@ export const USDC_ADDRESS: Record<number, `0x${string}`> = {
   [base.id]: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
 };
 
-export const ACTIVE_CHAIN = baseSepolia;
+export const ACTIVE_CHAIN = base;
 
 export const MAX_MEMO_LENGTH = 200;

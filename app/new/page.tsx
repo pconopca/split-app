@@ -11,6 +11,7 @@ import {
   ACTIVE_CHAIN,
   MAX_MEMO_LENGTH,
 } from '@/lib/contract';
+import { chainExplorerTxUrl } from '@/lib/onchain';
 import { ParticipantInput } from '@/components/ParticipantInput';
 import { SaveFriendsPrompt } from '@/components/SaveFriendsPrompt';
 import { ShareButton } from '@/components/ShareButton';
@@ -522,7 +523,7 @@ function Step3({
         </Link>
         {txHash && (
           <a
-            href={`https://sepolia.basescan.org/tx/${txHash}`}
+            href={chainExplorerTxUrl(txHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs underline text-zinc-500 text-center"
