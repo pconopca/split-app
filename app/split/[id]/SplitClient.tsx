@@ -6,10 +6,9 @@ import {
   useAccount,
   useReadContract,
   useReadContracts,
-  useSendCalls,
-  useWaitForCallsStatus,
+  useWriteContract,
+  useWaitForTransactionReceipt,
 } from 'wagmi';
-import { encodeFunctionData } from 'viem';
 import { ConnectButton } from '@/components/ConnectButton';
 import {
   SPLIT_REGISTRY_ABI,
@@ -111,71 +110,87 @@ export default function SplitClient({ idParam }: Props) {
   const hasEnoughBalance =
     amountPerPerson !== undefined && userBalance !== undefined && userBalance >= amountPerPerson;
 
-  // --- write tx (batched) ---
+  // --- write tx (sequential approve → pay) ---
+  // Sequential txs work on every wallet (Smart Wallet, MetaMask, hardware,
+  // etc.) and don't require paymaster sponsorship or EIP-5792 support.
+  // The single user-facing button auto-chains: when approve confirms, we
+  // immediately fire pay without a second click.
 
-  const { sendCalls, data: callsData, isPending, error, reset } = useSendCalls();
-  const { data: callsStatus } = useWaitForCallsStatus({
-    id: callsData?.id,
-    query: { enabled: !!callsData?.id },
-  });
-  const isMining =
-    callsData !== undefined &&
-    callsStatus?.status !== 'success' &&
-    callsStatus?.status !== 'failure';
-  const justSucceeded = callsStatus?.status === 'success';
-
+  type Phase = 'idle' | 'approving' | 'paying';
+  const [phase, setPhase] = useState<Phase>('idle');
   const [showSuccess, setShowSuccess] = useState(false);
   const [optimisticPaid, setOptimisticPaid] = useState(false);
   const userHasPaid = hasPaidData === true || optimisticPaid;
 
+  const { writeContract, data: txHash, isPending, error, reset } = useWriteContract();
+  const { data: receipt } = useWaitForTransactionReceipt({ hash: txHash });
+  const isMining = !!txHash && !receipt && !error;
+
+  // Refetch helpers — used after both approve and pay confirmations.
+  function refetchAll() {
+    refetchSplit();
+    refetchPaid();
+    refetchAllowance();
+    refetchHasPaid();
+  }
+
+  function firePay() {
+    if (splitId === null) return;
+    setPhase('paying');
+    reset();
+    writeContract({
+      address: splitRegistry,
+      abi: SPLIT_REGISTRY_ABI,
+      functionName: 'pay',
+      args: [splitId],
+      chainId: ACTIVE_CHAIN.id,
+    });
+  }
+
+  // Chain the flow when a receipt lands.
   useEffect(() => {
-    if (!justSucceeded) return;
-    setOptimisticPaid(true);
-    setShowSuccess(true);
-    // Retry the refetches a couple times so we eventually match real state.
-    const tick = () => {
-      refetchSplit();
-      refetchPaid();
-      refetchAllowance();
-      refetchHasPaid();
-    };
-    tick();
-    const t1 = setTimeout(tick, 1500);
-    const t2 = setTimeout(tick, 4000);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [justSucceeded, refetchSplit, refetchPaid, refetchAllowance, refetchHasPaid]);
+    if (!receipt) return;
+    if (phase === 'approving') {
+      // Approval confirmed — kick off the actual payment.
+      firePay();
+      return;
+    }
+    if (phase === 'paying') {
+      setPhase('idle');
+      setOptimisticPaid(true);
+      setShowSuccess(true);
+      // Retry refetches a couple times so RPC catches up.
+      refetchAll();
+      const t1 = setTimeout(refetchAll, 1500);
+      const t2 = setTimeout(refetchAll, 4000);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receipt]);
+
+  // If a tx errors midway, drop back to idle so the button is clickable.
+  useEffect(() => {
+    if (error) setPhase('idle');
+  }, [error]);
 
   function handlePay() {
     if (splitId === null || amountPerPerson === undefined) return;
     reset();
-    // EIP-5792 batch: Smart Wallet executes both calls in a single signature.
-    // Wallets without batch support fall back to sequential transactions.
-    const calls = [
-      ...(needsApproval
-        ? [
-            {
-              to: usdcAddress,
-              data: encodeFunctionData({
-                abi: ERC20_ABI,
-                functionName: 'approve',
-                args: [splitRegistry, amountPerPerson],
-              }),
-            },
-          ]
-        : []),
-      {
-        to: splitRegistry,
-        data: encodeFunctionData({
-          abi: SPLIT_REGISTRY_ABI,
-          functionName: 'pay',
-          args: [splitId],
-        }),
-      },
-    ];
-    sendCalls({ calls, chainId: ACTIVE_CHAIN.id });
+    if (needsApproval) {
+      setPhase('approving');
+      writeContract({
+        address: usdcAddress,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [splitRegistry, amountPerPerson],
+        chainId: ACTIVE_CHAIN.id,
+      });
+    } else {
+      firePay();
+    }
   }
 
   // --- render ---
@@ -248,6 +263,7 @@ export default function SplitClient({ idParam }: Props) {
           userBalance={userBalance}
           hasEnoughBalance={hasEnoughBalance}
           needsApproval={needsApproval}
+          phase={phase}
           isPending={isPending}
           isMining={isMining}
           error={error}

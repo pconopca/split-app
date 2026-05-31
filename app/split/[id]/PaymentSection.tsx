@@ -16,6 +16,7 @@ type Props = {
   userBalance: bigint | undefined;
   hasEnoughBalance: boolean;
   needsApproval: boolean;
+  phase: 'idle' | 'approving' | 'paying';
   isPending: boolean;
   isMining: boolean;
   error: Error | null;
@@ -33,6 +34,7 @@ export function PaymentSection({
   userBalance,
   hasEnoughBalance,
   needsApproval,
+  phase,
   isPending,
   isMining,
   error,
@@ -83,19 +85,19 @@ export function PaymentSection({
               )}
               <button
                 type="button"
-                disabled={isPending || isMining || !hasEnoughBalance}
+                disabled={isPending || isMining || phase !== 'idle' || !hasEnoughBalance}
                 onClick={onPay}
                 className="w-full py-4 rounded-xl bg-[#0052ff] hover:bg-[#0040cc] disabled:bg-zinc-200 dark:disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-semibold transition-colors shadow-lg shadow-[#0052ff]/20 disabled:shadow-none"
               >
-                {isPending
-                  ? 'Confirm in wallet…'
-                  : isMining
-                    ? 'Processing…'
-                    : `Pay $${formatUSDC(amountPerPerson)} USDC`}
+                {phase === 'approving' && isPending && 'Confirm approval…'}
+                {phase === 'approving' && isMining && 'Approving USDC…'}
+                {phase === 'paying' && isPending && 'Confirm payment…'}
+                {phase === 'paying' && isMining && 'Sending payment…'}
+                {phase === 'idle' && !isPending && !isMining && `Pay $${formatUSDC(amountPerPerson)} USDC`}
               </button>
-              {needsApproval && !isPending && !isMining && (
+              {needsApproval && phase === 'idle' && !isPending && !isMining && (
                 <p className="text-[11px] text-zinc-500 text-center px-2">
-                  One tap. Approve + pay happen in a single signature on Smart Wallet.
+                  Two confirmations: approve USDC then pay. We chain them automatically.
                 </p>
               )}
             </div>
