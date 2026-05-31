@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Split — pay your share in USDC on Base",
   description: "Split bills with friends in USDC, right inside the Base App.",
+  icons: {
+    icon: [{ url: "/icon.png", type: "image/png", sizes: "1024x1024" }],
+    apple: [{ url: "/icon.png", sizes: "1024x1024" }],
+    shortcut: ["/icon.png"],
+  },
 };
 
 export default function RootLayout({
