@@ -4,6 +4,7 @@ import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import { ConnectButton } from '@/components/ConnectButton';
 import { TotalsCards } from '@/components/TotalsCards';
+import { SplitMark } from '@/components/SplitMark';
 import { ACTIVE_CHAIN } from '@/lib/contract';
 
 export default function Home() {
@@ -13,9 +14,7 @@ export default function Home() {
     <div className="flex flex-col flex-1 bg-white dark:bg-[#0a0e1a]">
       <header className="w-full px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-[#0052ff] flex items-center justify-center text-white font-bold">
-            S
-          </div>
+          <SplitMark size={32} />
           <span className="font-semibold text-lg text-zinc-900 dark:text-white">Split</span>
         </div>
         <ConnectButton />

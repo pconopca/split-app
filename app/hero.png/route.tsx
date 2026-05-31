@@ -42,12 +42,22 @@ export async function GET() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontWeight: 800,
-                fontSize: 36,
-                letterSpacing: '-0.04em',
               }}
             >
-              S
+              <svg
+                width="36"
+                height="36"
+                viewBox="0 0 200 200"
+                fill="none"
+                stroke="white"
+                strokeWidth="28"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="100" y1="38" x2="100" y2="100" />
+                <line x1="100" y1="100" x2="30" y2="170" />
+                <line x1="100" y1="100" x2="170" y2="170" />
+              </svg>
             </div>
             <span>Split · onchain on Base</span>
           </div>

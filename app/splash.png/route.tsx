@@ -30,12 +30,22 @@ export async function GET() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontWeight: 800,
-            fontSize: 260,
-            letterSpacing: '-0.06em',
           }}
         >
-          S
+          <svg
+            width="240"
+            height="240"
+            viewBox="0 0 200 200"
+            fill="none"
+            stroke="white"
+            strokeWidth="28"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="100" y1="38" x2="100" y2="100" />
+            <line x1="100" y1="100" x2="30" y2="170" />
+            <line x1="100" y1="100" x2="170" y2="170" />
+          </svg>
         </div>
         <div style={{ display: 'flex', fontSize: 96, fontWeight: 700, letterSpacing: '-0.03em' }}>
           Split
