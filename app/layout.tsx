@@ -26,6 +26,10 @@ export const metadata: Metadata = {
     // base.dev domain ownership verification — keep until the domain is
     // approved and listed in the Base App directory.
     "base:app_id": "6a1c4fa2ac7b22973145cfe4",
+    // talent.app project verification — proves we own this domain for
+    // Builder Score attribution.
+    "talentapp:project_verification":
+      "58d531a805ad91b09de4b5404255287995b7b8cdea9b73e056aaf3219e6751294616ba20af6e083f23076fcbcb9612a666f6b4e74f83ad1949dcfa51d15eb595",
   },
 };
 
