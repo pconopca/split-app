@@ -2,8 +2,10 @@ import { ImageResponse } from 'next/og';
 
 export const runtime = 'edge';
 
+// base.dev / OG-card spec: aspect ratio 1.9:1, max 1MB.
+// 1200 / 1.9 ≈ 632; pick 632 for a clean integer that matches the spec.
 const WIDTH = 1200;
-const HEIGHT = 675;
+const HEIGHT = 632;
 
 export async function GET() {
   const img = new ImageResponse(
