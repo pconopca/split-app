@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { usePublicClient } from 'wagmi';
 import { base } from 'wagmi/chains';
-import { encodePacked, keccak256 } from 'viem';
+import { encodePacked, keccak256, stringToHex } from 'viem';
 import { namehash } from 'viem/ens';
 
 /**
@@ -94,8 +94,11 @@ const BASE_REVERSE_PARENT_NODE =
   '0x08d9b0993eb8c4da57c37a4b84a6e384c2623114ff4e9370ed51c9b8935109ba' as const;
 
 function reverseNodeFor(address: `0x${string}`): `0x${string}` {
+  // The address node is keccak256 of the lowercase hex *string* (40 ASCII
+  // bytes), NOT the 20-byte address itself. stringToHex turns the literal
+  // characters into their UTF-8 bytes for hashing.
   const stripped = address.slice(2).toLowerCase();
-  const addrNode = keccak256(`0x${stripped}` as `0x${string}`);
+  const addrNode = keccak256(stringToHex(stripped));
   return keccak256(
     encodePacked(['bytes32', 'bytes32'], [BASE_REVERSE_PARENT_NODE, addrNode]),
   );
