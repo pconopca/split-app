@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@/components/ConnectButton';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { useUserSplits, type UserSplit } from '@/lib/useUserSplits';
 import { formatUSDC } from '@/lib/usdc';
 
@@ -76,9 +77,7 @@ function SplitsPageInner() {
               <p className="text-sm text-zinc-500 text-center py-12">Loading from chain…</p>
             )}
 
-            {error && (
-              <p className="text-sm text-red-500 break-words">{error.message.split('\n')[0]}</p>
-            )}
+            <ErrorBanner error={error} silentOnRejection={false} />
 
             {!isLoading && list.length === 0 && (
               <div className="flex flex-col items-center gap-2 py-12 text-center">

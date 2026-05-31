@@ -16,8 +16,8 @@ export function TotalsCards() {
 
   if (error) {
     return (
-      <p className="text-xs text-red-500 text-center">
-        Could not load your balances. {error.message.split('\n')[0]}
+      <p className="text-xs text-zinc-500 text-center">
+        Couldn&apos;t load your balances right now.
       </p>
     );
   }

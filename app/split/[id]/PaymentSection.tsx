@@ -2,6 +2,7 @@
 
 import { ConnectButton } from '@/components/ConnectButton';
 import { ShareButton } from '@/components/ShareButton';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { ACTIVE_CHAIN } from '@/lib/contract';
 import { formatUSDC } from '@/lib/usdc';
 
@@ -105,9 +106,7 @@ export function PaymentSection({
         </>
       )}
 
-      {error && (
-        <p className="text-sm text-red-500 break-words">{error.message.split('\n')[0]}</p>
-      )}
+      <ErrorBanner error={error} />
     </>
   );
 }

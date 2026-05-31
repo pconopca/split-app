@@ -15,6 +15,7 @@ import { chainExplorerTxUrl } from '@/lib/onchain';
 import { ParticipantInput } from '@/components/ParticipantInput';
 import { SaveFriendsPrompt } from '@/components/SaveFriendsPrompt';
 import { ShareButton } from '@/components/ShareButton';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { formatUSDC } from '@/lib/usdc';
 
 type Row = { id: string; raw: string; resolved: `0x${string}` | null };
@@ -563,9 +564,7 @@ function Step3({
         </div>
       </div>
 
-      {error && (
-        <p className="text-sm text-red-500 break-words">{error.message.split('\n')[0]}</p>
-      )}
+      <ErrorBanner error={error} />
 
       <div className="flex gap-3 mt-auto">
         <button
