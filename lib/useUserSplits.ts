@@ -27,6 +27,7 @@ export type UserSplit = {
   participants: readonly `0x${string}`[];
   paidCount: bigint;
   memo: string;
+  cancelled: boolean;
   createdBlock: bigint;
   /**
    * 'creator' = user created this split.
@@ -164,7 +165,7 @@ export function useUserSplits(userAddress: `0x${string}` | undefined) {
                 args: [c.splitId, userAddress],
               }),
             ]);
-            const [, , participants, paidCount, memo] = splitTuple;
+            const [, , participants, paidCount, memo, cancelled] = splitTuple;
             const isCreator = c.creator.toLowerCase() === lowerUser;
             const isParticipant = participants.some(
               (p) => p.toLowerCase() === lowerUser,
@@ -182,6 +183,7 @@ export function useUserSplits(userAddress: `0x${string}` | undefined) {
               participants,
               paidCount,
               memo,
+              cancelled,
               createdBlock: c.createdBlock,
               role,
               hasPaidByUser,

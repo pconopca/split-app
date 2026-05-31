@@ -16,7 +16,7 @@ type Props = {
   userBalance: bigint | undefined;
   hasEnoughBalance: boolean;
   needsApproval: boolean;
-  phase: 'idle' | 'approving' | 'paying';
+  phase: 'idle' | 'approving' | 'paying' | 'cancelling';
   isPending: boolean;
   isMining: boolean;
   error: Error | null;

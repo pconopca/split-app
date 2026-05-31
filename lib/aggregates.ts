@@ -18,6 +18,8 @@ export function computeTotals(splits: readonly UserSplit[]): SplitTotals {
   let owedToYouCount = 0;
 
   for (const s of splits) {
+    // Cancelled splits never generate balances.
+    if (s.cancelled) continue;
     // You owe: you're listed as a participant, you didn't create it,
     // and you haven't paid yet.
     if (s.role === 'participant' && !s.hasPaidByUser) {

@@ -32,8 +32,11 @@ function SplitsPageInner() {
     setTab(next);
   }, [searchParams]);
 
-  const created = splits.filter((s) => s.role === 'creator' || s.role === 'both');
-  const asParticipant = splits.filter((s) => s.role === 'participant' || s.role === 'both');
+  // Cancelled splits are hidden from both tabs. They are still visible if
+  // the user navigates to /split/[id] directly (and shown as cancelled there).
+  const active = splits.filter((s) => !s.cancelled);
+  const created = active.filter((s) => s.role === 'creator' || s.role === 'both');
+  const asParticipant = active.filter((s) => s.role === 'participant' || s.role === 'both');
   const list = tab === 'created' ? created : asParticipant;
 
   return (

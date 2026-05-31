@@ -59,6 +59,7 @@ export default function SplitClient({ idParam }: Props) {
   const participants = splitData?.[2] ?? [];
   const paidCount = splitData?.[3] ?? 0n;
   const memo = splitData?.[4] ?? '';
+  const cancelled = splitData?.[5] ?? false;
   const exists = creator && creator !== '0x0000000000000000000000000000000000000000';
 
   const { data: paidStatuses, refetch: refetchPaid } = useReadContracts({
@@ -116,7 +117,7 @@ export default function SplitClient({ idParam }: Props) {
   // The single user-facing button auto-chains: when approve confirms, we
   // immediately fire pay without a second click.
 
-  type Phase = 'idle' | 'approving' | 'paying';
+  type Phase = 'idle' | 'approving' | 'paying' | 'cancelling';
   const [phase, setPhase] = useState<Phase>('idle');
   const [showSuccess, setShowSuccess] = useState(false);
   const [optimisticPaid, setOptimisticPaid] = useState(false);
@@ -147,6 +148,22 @@ export default function SplitClient({ idParam }: Props) {
     });
   }
 
+  function handleCancel() {
+    if (splitId === null) return;
+    if (!confirm('Cancel this split? This is permanent and the link will stop working.')) {
+      return;
+    }
+    setPhase('cancelling');
+    reset();
+    writeContract({
+      address: splitRegistry,
+      abi: SPLIT_REGISTRY_ABI,
+      functionName: 'cancelSplit',
+      args: [splitId],
+      chainId: ACTIVE_CHAIN.id,
+    });
+  }
+
   // Chain the flow when a receipt lands.
   useEffect(() => {
     if (!receipt) return;
@@ -160,6 +177,16 @@ export default function SplitClient({ idParam }: Props) {
       setOptimisticPaid(true);
       setShowSuccess(true);
       // Retry refetches a couple times so RPC catches up.
+      refetchAll();
+      const t1 = setTimeout(refetchAll, 1500);
+      const t2 = setTimeout(refetchAll, 4000);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
+    }
+    if (phase === 'cancelling') {
+      setPhase('idle');
       refetchAll();
       const t1 = setTimeout(refetchAll, 1500);
       const t2 = setTimeout(refetchAll, 4000);
@@ -226,6 +253,26 @@ export default function SplitClient({ idParam }: Props) {
       </Gated>
     );
   }
+  if (cancelled) {
+    return (
+      <Gated
+        idParam={idParam}
+        title="Split cancelled"
+        body={
+          isCreator
+            ? "You cancelled this split. It can't be paid anymore."
+            : 'The creator cancelled this split. No payment is owed.'
+        }
+      >
+        <Link
+          href="/"
+          className="px-4 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+        >
+          Back home
+        </Link>
+      </Gated>
+    );
+  }
 
   return (
     <div className="flex flex-col flex-1 bg-zinc-50 dark:bg-black p-6">
@@ -269,6 +316,19 @@ export default function SplitClient({ idParam }: Props) {
           error={error}
           onPay={handlePay}
         />
+
+        {isCreator && paidCount === 0n && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={phase !== 'idle' || isPending || isMining}
+            className="text-xs text-zinc-500 hover:text-red-600 disabled:opacity-50 transition-colors self-center mt-2"
+          >
+            {phase === 'cancelling' && isPending && 'Confirm cancel…'}
+            {phase === 'cancelling' && isMining && 'Cancelling…'}
+            {phase !== 'cancelling' && 'Cancel this split'}
+          </button>
+        )}
       </main>
 
       {showSuccess && (
