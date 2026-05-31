@@ -21,13 +21,20 @@ export function ParticipantList({
   viewerAddress,
   optimisticSelfPaid,
 }: Props) {
+  const settled = paidCount === BigInt(participants.length) && participants.length > 0;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Participants</p>
-        <p className="text-xs text-zinc-500">
-          {paidCount.toString()} / {participants.length} paid
-        </p>
+        {settled ? (
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-950/40 px-2 py-0.5 rounded-full">
+            Settled
+          </span>
+        ) : (
+          <p className="text-xs text-zinc-500">
+            {paidCount.toString()} / {participants.length} paid
+          </p>
+        )}
       </div>
       <ul className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-200 dark:divide-zinc-800">
         {participants.map((p, i) => {

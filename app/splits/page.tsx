@@ -146,7 +146,11 @@ function SplitCard({ split, viewerAddress }: { split: UserSplit; viewerAddress: 
     <li>
       <Link
         href={`/split/${split.id.toString()}`}
-        className="block rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 hover:border-[#0052ff]/40 transition-colors"
+        className={`block rounded-xl border p-4 transition-colors ${
+          allPaid
+            ? 'border-green-300 dark:border-green-900 bg-green-50/60 dark:bg-green-950/20 hover:border-green-400 dark:hover:border-green-700'
+            : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-[#0052ff]/40'
+        }`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-col gap-1 min-w-0">
@@ -167,11 +171,13 @@ function SplitCard({ split, viewerAddress }: { split: UserSplit; viewerAddress: 
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
                 allPaid
-                  ? 'bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300'
+                  ? 'bg-green-200 dark:bg-green-900/60 text-green-800 dark:text-green-200'
                   : 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
               }`}
             >
-              {split.paidCount.toString()} / {split.participants.length} paid
+              {allPaid
+                ? '🎉 Settled'
+                : `${split.paidCount.toString()} / ${split.participants.length} paid`}
             </span>
             {youOwe && (
               <span className="text-xs text-[#0052ff] font-medium">You owe</span>
@@ -183,6 +189,11 @@ function SplitCard({ split, viewerAddress }: { split: UserSplit; viewerAddress: 
             )}
             {split.role === 'creator' && !allPaid && (
               <span className="text-xs text-zinc-500">Collecting</span>
+            )}
+            {split.role === 'creator' && allPaid && (
+              <span className="text-xs text-green-700 dark:text-green-300 font-medium">
+                Everyone paid
+              </span>
             )}
             {allPaid && <span className="text-xs text-zinc-500">Settled</span>}
           </div>

@@ -291,6 +291,24 @@ export default function SplitClient({ idParam }: Props) {
           creator={creator as `0x${string}`}
         />
 
+        {paidCount === BigInt(participants.length) && participants.length > 0 && (
+          <div className="rounded-xl border border-green-300 dark:border-green-900 bg-green-50 dark:bg-green-950/30 p-4 flex items-center gap-3">
+            <span className="text-3xl" aria-hidden>🎉</span>
+            <div className="flex flex-col">
+              <p className="text-sm font-semibold text-green-800 dark:text-green-200">
+                Fully settled
+              </p>
+              <p className="text-xs text-green-700/80 dark:text-green-200/80">
+                {isCreator
+                  ? 'Everyone paid their share.'
+                  : userHasPaid
+                    ? "You and everyone else are paid up."
+                    : 'Every participant paid.'}
+              </p>
+            </div>
+          </div>
+        )}
+
         <ParticipantList
           participants={participants}
           paidStatuses={paidStatuses}
