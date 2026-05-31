@@ -22,6 +22,11 @@ export const metadata: Metadata = {
     apple: [{ url: "/icon.png", sizes: "1024x1024" }],
     shortcut: ["/icon.png"],
   },
+  other: {
+    // base.dev domain ownership verification — keep until the domain is
+    // approved and listed in the Base App directory.
+    "base:app_id": "6a1c4fa2ac7b22973145cfe4",
+  },
 };
 
 export default function RootLayout({
